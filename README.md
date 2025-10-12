@@ -13,26 +13,46 @@ A Chrome extension and backend system for capturing, organizing, and planning tr
 │   ├── contents/
 │   └── lib/
 │
-├── backend/                ← Next.js API (Phase 0.2 - Coming soon)
-│   └── [empty for now]
+├── backend/                ← Next.js API (Phase 0.2 COMPLETE)
+│   ├── app/api/           ← API routes
+│   │   ├── health/
+│   │   ├── countries/
+│   │   ├── locations/
+│   │   ├── trips/
+│   │   └── trip-locations/
+│   └── lib/               ← Utilities
+│       ├── supabase.ts
+│       ├── types.ts
+│       ├── validation.ts
+│       └── errors.ts
 │
 └── artifacts/              ← Design documentation
     ├── problem_exploration.md
     ├── system_design_specification.md
+    ├── database_schema.sql
     └── UIUX/
         └── highlevel_uiux.md
 ```
 
-## Current Status: Phase 0.1 ✅
+## Current Status: Phase 0.2 ✅
 
-The Chrome extension is complete and working with local storage:
+The Chrome extension and backend API are complete:
 
+**Extension (Phase 0.1):**
 - ✅ Context menu (right-click to save)
 - ✅ Local storage (chrome.storage.local)
 - ✅ Popup UI with list view
 - ✅ Delete functionality
 - ✅ Toast notifications
 - ✅ TypeScript + React + Tailwind CSS
+
+**Backend API (Phase 0.2):**
+- ✅ Next.js 15 + TypeScript
+- ✅ Supabase database integration
+- ✅ Complete REST API (locations, trips, linking)
+- ✅ Zod validation
+- ✅ CORS for extension
+- ✅ Error handling
 
 ## Quick Start
 
@@ -71,16 +91,17 @@ All design documents are in the `artifacts/` folder:
 
 ---
 
-### Phase 0.2: Backend Integration (Next)
-**Status**: Not started
+### Phase 0.2: Backend Integration ✅ COMPLETE
+**Status**: Complete
 
-**What we'll add**:
-- Next.js backend API
-- Supabase database
-- User authentication
-- Cloud sync
+**What we built**:
+- ✅ Next.js 15 backend API
+- ✅ Supabase database integration
+- ✅ Complete REST API for locations, trips, and linking
+- ✅ Zod validation and error handling
+- ✅ CORS middleware for extension
 
-**Estimated time**: 2-3 hours
+**See**: `backend/README.md` for API documentation
 
 ---
 
