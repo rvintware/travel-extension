@@ -1,9 +1,12 @@
-import type { SavedCapture, StorageData } from "./types"
+import type { SavedCapture, Settings } from "./types"
 
 // Storage keys
 export const STORAGE_KEYS = {
-  CAPTURES: 'captures',
+  CAPTURES: 'captures',          // Phase 0.1 legacy
   USER_ID: 'userId',
+  SETTINGS: 'settings',          // Phase 0.2
+  CACHED_COUNTRIES: 'cachedCountries',
+  CACHED_TRIPS: 'cachedTrips',
 } as const
 
 /**
@@ -54,5 +57,66 @@ export async function getUserId(): Promise<string> {
  */
 export async function clearAllCaptures(): Promise<void> {
   await chrome.storage.local.set({ [STORAGE_KEYS.CAPTURES]: [] })
+}
+
+// ============================================================================
+// PHASE 0.2: Settings Management
+// ============================================================================
+
+/**
+ * Get user settings
+ */
+export async function getSettings(): Promise<Settings | null> {
+  const result = await chrome.storage.local.get(STORAGE_KEYS.SETTINGS)
+  return result[STORAGE_KEYS.SETTINGS] || null
+}
+
+/**
+ * Save user settings
+ */
+export async function saveSettings(settings: Settings): Promise<void> {
+  await chrome.storage.local.set({ [STORAGE_KEYS.SETTINGS]: settings })
+}
+
+/**
+ * Get default country ID
+ */
+export async function getDefaultCountry(): Promise<string | null> {
+  const settings = await getSettings()
+  return settings?.defaultCountryId || null
+}
+
+/**
+ * Set default country ID
+ */
+export async function setDefaultCountry(countryId: string): Promise<void> {
+  const settings = await getSettings() || {
+    defaultCountryId: countryId,
+    defaultView: 'trips',
+    rememberLastTab: false,
+  }
+  settings.defaultCountryId = countryId
+  await saveSettings(settings)
+}
+
+/**
+ * Get default trip ID
+ */
+export async function getDefaultTrip(): Promise<string | null> {
+  const settings = await getSettings()
+  return settings?.defaultTripId || null
+}
+
+/**
+ * Set default trip ID
+ */
+export async function setDefaultTrip(tripId: string | null): Promise<void> {
+  const settings = await getSettings() || {
+    defaultCountryId: '',
+    defaultView: 'trips',
+    rememberLastTab: false,
+  }
+  settings.defaultTripId = tripId || undefined
+  await saveSettings(settings)
 }
 

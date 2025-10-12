@@ -34,25 +34,28 @@ A Chrome extension and backend system for capturing, organizing, and planning tr
         └── highlevel_uiux.md
 ```
 
-## Current Status: Phase 0.2 ✅
+## Current Status: Phase 0.2 Extension Integration ✅ COMPLETE
 
-The Chrome extension and backend API are complete:
-
-**Extension (Phase 0.1):**
-- ✅ Context menu (right-click to save)
-- ✅ Local storage (chrome.storage.local)
-- ✅ Popup UI with list view
-- ✅ Delete functionality
-- ✅ Toast notifications
-- ✅ TypeScript + React + Tailwind CSS
-
-**Backend API (Phase 0.2):**
+**Backend API:**
 - ✅ Next.js 15 + TypeScript
-- ✅ Supabase database integration
-- ✅ Complete REST API (locations, trips, linking)
-- ✅ Zod validation
+- ✅ Supabase database with Pool + References architecture
+- ✅ Complete REST API (15 endpoints)
+- ✅ Zod validation & error handling
 - ✅ CORS for extension
-- ✅ Error handling
+
+**Extension (Fully Integrated):**
+- ✅ Two-tab UI (My Locations / My Trips)
+- ✅ Pokemon-style location cards
+- ✅ Country-grouped library
+- ✅ Trip organization with day-by-day planning
+- ✅ Time estimates with comfort levels
+- ✅ Simplified 2-option right-click menu
+- ✅ Settings panel (default country/trip)
+- ✅ API integration (saves to Supabase)
+- ✅ Move between days, Remove vs Delete
+- ✅ Add to trip from library
+
+**See:** `PHASE_0_2_TESTING.md` for testing guide
 
 ## Quick Start
 

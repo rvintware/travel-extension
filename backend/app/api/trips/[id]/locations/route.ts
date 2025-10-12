@@ -24,6 +24,7 @@ export async function GET(
       .eq('trip_id', id)
       .order('day_number', { ascending: true, nullsFirst: false })
       .order('display_order', { ascending: true })
+      .order('added_at', { ascending: false })
     
     if (error) throw error
     

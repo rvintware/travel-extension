@@ -1,22 +1,116 @@
-// Core data types for Phase 0.1
+// Core data types for Phase 0.2
+
+// ============================================================================
+// PHASE 0.1 TYPES (Legacy - for backward compatibility)
+// ============================================================================
 
 export interface SavedCapture {
-  id: string;              // UUID
-  text: string;            // Highlighted text
-  url: string;             // Source URL
-  pageTitle: string;       // Page title
-  timestamp: number;       // Unix timestamp
-  tripId: string;          // Hardcoded "default" for Phase 0.1
+  id: string;
+  text: string;
+  url: string;
+  pageTitle: string;
+  timestamp: number;
+  tripId: string;
 }
 
-export interface StorageData {
-  captures: SavedCapture[];
-  userId: string;          // Generated on install (for future)
+// ============================================================================
+// PHASE 0.2 TYPES (Backend API)
+// ============================================================================
+
+export interface Settings {
+  defaultCountryId: string;
+  defaultTripId?: string;
+  defaultView: 'trips' | 'locations';
+  rememberLastTab: boolean;
 }
 
-// Message types for communication between extension components
+export interface Country {
+  id: string;
+  name: string;
+  code: string;
+  emoji: string | null;
+  region: string | null;
+}
+
+export interface Location {
+  id: string;
+  user_id: string;
+  country_id: string;
+  name: string;
+  place_id?: string | null;
+  address?: string | null;
+  lat?: number | null;
+  lng?: number | null;
+  category?: string | null;
+  subcategory?: string | null;
+  summary?: string | null;
+  tips: string[];  // JSONB array
+  photos: string[];
+  user_notes?: string | null;
+  user_rating?: number | null;
+  is_favorite: boolean;
+  original_text: string;
+  source_url: string;
+  page_title?: string | null;
+  is_from_itinerary: boolean;
+  source_type: 'single_save' | 'bulk_import';
+  processing_status: 'pending' | 'processing' | 'complete' | 'error';
+  location_verified: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface Trip {
+  id: string;
+  user_id: string;
+  country_id: string;
+  name: string;
+  description?: string | null;
+  start_date?: string | null;
+  end_date?: string | null;
+  duration_days?: number | null;
+  is_itinerary: boolean;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+  // Populated from join
+  country?: Country;
+  locationCount?: number;
+}
+
+export interface TripLocation {
+  id: string;
+  trip_id: string;
+  location_id: string;
+  day_number?: number | null;
+  display_order: number;
+  time_of_day?: string | null;
+  suggested_time?: string | null;
+  estimated_duration_minutes?: number | null;
+  notes?: string | null;
+  priority: 'must_see' | 'normal' | 'optional';
+  status: 'planned' | 'visited' | 'skipped';
+  added_at: string;
+}
+
+export interface LocationWithTripData extends Location {
+  // Trip-specific data (when viewing in trip context)
+  tripLocationId?: string;
+  dayNumber?: number | null;
+  displayOrder?: number;
+  timeOfDay?: string | null;
+  suggestedTime?: string | null;
+  estimatedDurationMinutes?: number | null;
+  tripNotes?: string | null;
+  priority?: string;
+}
+
+// ============================================================================
+// MESSAGE TYPES
+// ============================================================================
+
 export interface Message {
-  type: 'CAPTURE_SAVE' | 'SHOW_TOAST' | 'CAPTURES_UPDATED';
+  type: 'SHOW_TOAST' | 'CAPTURES_UPDATED' | 'SETTINGS_UPDATED';
   payload?: any;
 }
 
@@ -28,10 +122,16 @@ export interface ToastMessage extends Message {
   };
 }
 
-export interface CaptureUpdateMessage extends Message {
-  type: 'CAPTURES_UPDATED';
-  payload: {
-    captures: SavedCapture[];
-  };
+// ============================================================================
+// UI STATE TYPES
+// ============================================================================
+
+export type ViewType = 'tripList' | 'tripDetail' | 'locationList' | 'countryDetail' | 'settings'
+
+export interface NavigationState {
+  view: ViewType;
+  selectedTripId?: string;
+  selectedCountryId?: string;
+  selectedDay?: number | 'all' | 'unscheduled';
 }
 

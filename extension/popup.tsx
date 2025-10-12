@@ -1,104 +1,289 @@
 import { useEffect, useState } from "react"
-import { CaptureCard } from "./components/CaptureCard"
-import { EmptyState } from "./components/EmptyState"
-import type { SavedCapture } from "./lib/types"
-import { getCaptures, deleteCapture } from "./lib/storage"
+import { Tabs } from "./components/Tabs"
+import { TripsView } from "./popup/TripsView"
+import { LocationsView } from "./popup/LocationsView"
+import { CountryDetail } from "./popup/CountryDetail"
+import { TripDetail } from "./popup/TripDetail"
+import { Settings } from "./components/Settings"
+import { AddToTripModal } from "./components/AddToTripModal"
+import type { Country, Trip, Location, ViewType } from "./lib/types"
+import { getUserId, getSettings } from "./lib/storage"
+import { Cache } from "./lib/cache"
+import * as api from "./lib/api"
 import "./style.css"
 
 function IndexPopup() {
-  const [captures, setCaptures] = useState<SavedCapture[]>([])
+  // Tab state
+  const [activeTab, setActiveTab] = useState<'locations' | 'trips'>('trips')
+  
+  // View state
+  const [view, setView] = useState<ViewType>('tripList')
+  const [selectedTrip, setSelectedTrip] = useState<Trip | null>(null)
+  const [selectedCountry, setSelectedCountry] = useState<Country | null>(null)
+  
+  // Data state
+  const [countries, setCountries] = useState<Country[]>([])
+  const [trips, setTrips] = useState<Trip[]>([])
+  const [locations, setLocations] = useState<Location[]>([])
   const [loading, setLoading] = useState(true)
-
-  // Load captures on mount
+  
+  // Modal state
+  const [showAddToTripModal, setShowAddToTripModal] = useState(false)
+  const [locationToAdd, setLocationToAdd] = useState<Location | null>(null)
+  
+  // Load initial data with caching
   useEffect(() => {
-    loadCaptures()
+    loadDataWithCache()
   }, [])
-
+  
   // Listen for updates from background script
   useEffect(() => {
-    const handleMessage = (message: any) => {
+    const handleMessage = async (message: any) => {
       if (message.type === 'CAPTURES_UPDATED') {
-        loadCaptures()
+        // Invalidate caches (new location added, counts changed)
+        await Cache.invalidateTrips()
+        await Cache.invalidateLocations()
+        
+        // Reload data
+        await loadDataWithCache()
       }
     }
     
     chrome.runtime.onMessage.addListener(handleMessage)
     return () => chrome.runtime.onMessage.removeListener(handleMessage)
   }, [])
-
-  // Listen for storage changes
-  useEffect(() => {
-    const handleStorageChange = () => {
-      loadCaptures()
-    }
-    
-    chrome.storage.onChanged.addListener(handleStorageChange)
-    return () => chrome.storage.onChanged.removeListener(handleStorageChange)
-  }, [])
-
-  const loadCaptures = async () => {
+  
+  async function loadDataWithCache() {
     try {
-      const data = await getCaptures()
-      setCaptures(data)
+      const userId = await getUserId()
+      const settings = await getSettings()
+      
+      // STEP 1: Load from cache first (instant!)
+      const [cachedCountries, cachedTrips, cachedLocations] = await Promise.all([
+        Cache.getCountries(),
+        Cache.getTrips(),
+        Cache.getLocations()
+      ])
+      
+      if (cachedCountries.data) {
+        setCountries(cachedCountries.data)
+      }
+      
+      if (cachedTrips.data) {
+        setTrips(cachedTrips.data)
+        setLoading(false) // Show UI immediately!
+      }
+      
+      if (cachedLocations.data) {
+        setLocations(cachedLocations.data)
+      }
+      
+      // STEP 2: Set initial tab from settings
+      if (settings?.rememberLastTab) {
+        const lastTab = await Cache.getLastTab()
+        if (lastTab) setActiveTab(lastTab)
+      } else if (settings?.defaultView) {
+        setActiveTab(settings.defaultView)
+      }
+      
+      // STEP 3: If all caches are fresh, we're done!
+      if (cachedCountries.fresh && cachedTrips.fresh && cachedLocations.fresh) {
+        return // All data is fresh, no need to fetch!
+      }
+      
+      // STEP 4: Fetch fresh data in background (only what's stale)
+      const [countriesData, tripsData, locationsData] = await Promise.all([
+        cachedCountries.fresh ? Promise.resolve(cachedCountries.data!) : api.getCountries(),
+        cachedTrips.fresh ? Promise.resolve(cachedTrips.data!) : api.getTrips(userId),
+        cachedLocations.fresh ? Promise.resolve(cachedLocations.data!) : api.getLocations(userId)
+      ])
+      
+      // STEP 5: Update UI with fresh data (seamless)
+      setCountries(countriesData)
+      setTrips(tripsData)
+      setLocations(locationsData)
+      setLoading(false)
+      
+      // STEP 6: Update cache (only what was fetched)
+      if (!cachedCountries.fresh) {
+        await Cache.setCountries(countriesData)
+      }
+      if (!cachedTrips.fresh) {
+        await Cache.setTrips(tripsData)
+      }
+      if (!cachedLocations.fresh) {
+        await Cache.setLocations(locationsData)
+      }
     } catch (error) {
-      console.error('Failed to load captures:', error)
-    } finally {
+      console.error('Failed to load data:', error)
       setLoading(false)
     }
   }
-
-  const handleDelete = async (id: string) => {
-    try {
-      await deleteCapture(id)
-      setCaptures(prev => prev.filter(c => c.id !== id))
-    } catch (error) {
-      console.error('Failed to delete capture:', error)
+  
+  async function handleRefresh() {
+    // Clear all caches
+    await Cache.clearAll()
+    
+    // Force reload
+    setLoading(true)
+    await loadDataWithCache()
+  }
+  
+  // Handle tab change
+  async function handleTabChange(tab: 'locations' | 'trips') {
+    setActiveTab(tab)
+    
+    // Save last tab for "remember" setting
+    await Cache.setLastTab(tab)
+    
+    // Reset to list view when switching tabs
+    if (tab === 'trips') {
+      setView('tripList')
+    } else {
+      setView('locationList')
     }
   }
-
-  return (
-    <div className="w-[360px] h-[500px] bg-gray-50 flex flex-col">
-      {/* Header */}
-      <div className="bg-white border-b border-gray-200 p-4 flex-shrink-0">
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-lg font-semibold text-gray-900">My Trips</h1>
-            <p className="text-sm text-gray-600">
-              {captures.length} {captures.length === 1 ? 'location' : 'locations'} saved
-            </p>
-          </div>
-          <div className="text-2xl">🗺️</div>
-        </div>
-      </div>
-
-      {/* Content */}
-      <div className="flex-1 overflow-y-auto">
-        {loading ? (
-          <div className="flex items-center justify-center h-full">
-            <div className="text-gray-500 text-sm">Loading...</div>
-          </div>
-        ) : captures.length === 0 ? (
-          <EmptyState />
+  
+  // Handle navigation
+  function handleTripClick(trip: Trip) {
+    setSelectedTrip(trip)
+    setView('tripDetail')
+  }
+  
+  function handleCountryClick(country: Country) {
+    setSelectedCountry(country)
+    setView('countryDetail')
+  }
+  
+  function handleBackToList() {
+    if (activeTab === 'trips') {
+      setView('tripList')
+      setSelectedTrip(null)
+    } else {
+      setView('locationList')
+      setSelectedCountry(null)
+    }
+  }
+  
+  function handleSettingsClick() {
+    setView('settings')
+  }
+  
+  function handleBackFromSettings() {
+    if (activeTab === 'trips') {
+      setView('tripList')
+    } else {
+      setView('locationList')
+    }
+  }
+  
+  function handleNewTrip() {
+    // TODO: Open new trip modal
+    console.log('Create new trip')
+  }
+  
+  function handleAddToTrip(location: Location) {
+    setLocationToAdd(location)
+    setShowAddToTripModal(true)
+  }
+  
+  function handleAddToTripSuccess() {
+    setShowAddToTripModal(false)
+    setLocationToAdd(null)
+    loadData() // Refresh data
+  }
+  
+  function handleDeleteLocation(location: Location) {
+    loadData() // Refresh data
+  }
+  
+  // Count locations by country
+  const locationsByCountry: Record<string, number> = {}
+  locations.forEach(loc => {
+    locationsByCountry[loc.country_id] = (locationsByCountry[loc.country_id] || 0) + 1
+  })
+  
+  // Render appropriate view
+  function renderView() {
+    if (view === 'settings') {
+      return (
+        <Settings
+          countries={countries}
+          trips={trips}
+          onBack={handleBackFromSettings}
+          onSave={handleBackFromSettings}
+        />
+      )
+    }
+    
+    if (view === 'tripDetail' && selectedTrip) {
+      return (
+        <TripDetail
+          trip={selectedTrip}
+          onBack={handleBackToList}
+        />
+      )
+    }
+    
+    if (view === 'countryDetail' && selectedCountry) {
+      return (
+        <CountryDetail
+          country={selectedCountry}
+          onBack={handleBackToList}
+          onAddToTrip={handleAddToTrip}
+          onDelete={handleDeleteLocation}
+        />
+      )
+    }
+    
+    // Show tabs only for list views
+    return (
+      <>
+        <Tabs
+          active={activeTab}
+          onChange={handleTabChange}
+          onRefresh={handleRefresh}
+          onSettingsClick={handleSettingsClick}
+        />
+        
+        {activeTab === 'trips' ? (
+          <TripsView
+            trips={trips}
+            onTripClick={handleTripClick}
+            onNewTrip={handleNewTrip}
+          />
         ) : (
-          <div className="p-4 space-y-3">
-            {captures.map((capture) => (
-              <CaptureCard
-                key={capture.id}
-                capture={capture}
-                onDelete={handleDelete}
-              />
-            ))}
-          </div>
+          <LocationsView
+            countries={countries}
+            locationsByCountry={locationsByCountry}
+            onCountryClick={handleCountryClick}
+          />
         )}
-      </div>
-
-      {/* Footer tip */}
-      {!loading && captures.length > 0 && (
-        <div className="bg-primary-light border-t border-primary px-4 py-2 flex-shrink-0">
-          <p className="text-xs text-primary-dark text-center">
-            💡 Tip: Right-click any text on a webpage to save it
-          </p>
+      </>
+    )
+  }
+  
+  return (
+    <div className="w-[360px] h-[500px] bg-gray-50 flex flex-col overflow-hidden">
+      {loading ? (
+        <div className="flex items-center justify-center h-full">
+          <div className="text-gray-500 text-sm">Loading...</div>
         </div>
+      ) : (
+        renderView()
+      )}
+      
+      {/* Add to Trip Modal */}
+      {showAddToTripModal && locationToAdd && (
+        <AddToTripModal
+          location={locationToAdd}
+          trips={trips}
+          onClose={() => {
+            setShowAddToTripModal(false)
+            setLocationToAdd(null)
+          }}
+          onSuccess={handleAddToTripSuccess}
+        />
       )}
     </div>
   )

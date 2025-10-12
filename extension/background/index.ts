@@ -1,69 +1,195 @@
-import type { SavedCapture } from "../lib/types"
-import { getUserId, saveCapture } from "../lib/storage"
-import { generateId } from "../lib/utils"
+import { getUserId, getSettings, getDefaultCountry, getDefaultTrip } from "../lib/storage"
+import * as api from "../lib/api"
 
-// Context menu ID
-const CONTEXT_MENU_ID = 'save-to-trips'
+// Context menu IDs
+const MENU_ID_TRIP = 'save-to-trip'
+const MENU_ID_LIBRARY = 'save-to-library'
 
 // Initialize extension on install
 chrome.runtime.onInstalled.addListener(async () => {
-  console.log('Travel Companion extension installed')
+  console.log('Travel Companion Phase 0.2 installed')
   
   // Generate user ID if not exists
   await getUserId()
   
-  // Create context menu
-  chrome.contextMenus.create({
-    id: CONTEXT_MENU_ID,
-    title: '⭐ Save to My Trips',
-    contexts: ['selection'],
-  })
+  // Initialize default settings
+  const settings = await getSettings()
+  if (!settings) {
+    // Fetch countries and set first one as default
+    try {
+      const countries = await api.getCountries()
+      const japanCountry = countries.find((c: any) => c.code === 'JP')
+      
+      await chrome.storage.local.set({
+        settings: {
+          defaultCountryId: japanCountry?.id || countries[0]?.id,
+          defaultView: 'trips',
+          rememberLastTab: false,
+        }
+      })
+    } catch (error) {
+      console.error('Failed to fetch countries:', error)
+    }
+  }
+  
+  // Create context menus
+  await updateContextMenus()
 })
+
+/**
+ * Update context menus based on current settings
+ */
+async function updateContextMenus() {
+  // Remove existing menus
+  await chrome.contextMenus.removeAll()
+  
+  const settings = await getSettings()
+  const defaultTrip = settings?.defaultTripId
+  
+  if (defaultTrip) {
+    // Try to get trip name
+    try {
+      const trip = await api.getTrip(defaultTrip)
+      chrome.contextMenus.create({
+        id: MENU_ID_TRIP,
+        title: `⭐ Save to ${trip.name}`,
+        contexts: ['selection'],
+      })
+    } catch (error) {
+      // Trip doesn't exist anymore, clear default
+      await setDefaultTrip(null)
+    }
+  }
+  
+  // Always show library option
+  const defaultCountryId = settings?.defaultCountryId
+  if (defaultCountryId) {
+    try {
+      const countries = await api.getCountries()
+      const country = countries.find((c: any) => c.id === defaultCountryId)
+      const countryName = country?.name || 'Library'
+      const emoji = country?.emoji || '📚'
+      
+      chrome.contextMenus.create({
+        id: MENU_ID_LIBRARY,
+        title: `${emoji} Save to ${countryName} Library`,
+        contexts: ['selection'],
+      })
+    } catch (error) {
+      // Fallback
+      chrome.contextMenus.create({
+        id: MENU_ID_LIBRARY,
+        title: '📚 Save to Library',
+        contexts: ['selection'],
+      })
+    }
+  }
+}
 
 // Handle context menu clicks
 chrome.contextMenus.onClicked.addListener(async (info, tab) => {
-  if (info.menuItemId === CONTEXT_MENU_ID && info.selectionText && tab?.id) {
-    try {
-      // Create capture object
-      const capture: SavedCapture = {
-        id: generateId(),
-        text: info.selectionText,
-        url: tab.url || '',
-        pageTitle: tab.title || 'Untitled',
-        timestamp: Date.now(),
-        tripId: 'default', // Phase 0.1: hardcoded
+  if (!info.selectionText || !tab?.id) return
+  
+  try {
+    const userId = await getUserId()
+    const settings = await getSettings()
+    const defaultCountryId = settings?.defaultCountryId
+    
+    if (!defaultCountryId) {
+      throw new Error('Default country not set. Please configure in settings.')
+    }
+    
+    // Use default country (respect user's choice)
+    const finalCountryId = defaultCountryId
+    
+    // Get country info for toast message
+    const countries = await api.getCountries()
+    const country = countries.find((c: any) => c.id === finalCountryId)
+    
+    // Create location in pool
+    const location = await api.saveLocation({
+      userId,
+      countryId: finalCountryId,
+      name: api.extractNameFromText(info.selectionText),
+      originalText: info.selectionText,
+      sourceUrl: tab.url || '',
+      pageTitle: tab.title || 'Untitled',
+    })
+    
+    console.log('Location created:', location.id)
+    
+    // If saving to trip, link it
+    if (info.menuItemId === MENU_ID_TRIP && settings?.defaultTripId) {
+      await api.linkLocationToTrip({
+        tripId: settings.defaultTripId,
+        locationId: location.id,
+        // Leave unscheduled (no dayNumber)
+      })
+      
+      // Get trip name for toast with error handling
+      let tripName = 'Trip'
+      try {
+        const trip = await api.getTrip(settings.defaultTripId)
+        tripName = trip.name
+      } catch (error) {
+        console.warn('Could not fetch trip name:', error)
       }
       
-      // Save to storage
-      await saveCapture(capture)
-      
-      // Show toast notification on the page
-      chrome.tabs.sendMessage(tab.id, {
-        type: 'SHOW_TOAST',
-        payload: {
-          message: '✓ Saved to My Trips',
-          duration: 3000,
-        },
-      }).catch((error) => {
-        // Content script might not be loaded yet, that's okay
-        console.log('Could not show toast:', error.message)
-      })
-      
-      // Notify popup if it's open
-      chrome.runtime.sendMessage({
-        type: 'CAPTURES_UPDATED',
-      }).catch(() => {
-        // Popup might not be open, that's okay
-      })
-      
-      console.log('Capture saved:', capture.id)
-    } catch (error) {
-      console.error('Failed to save capture:', error)
+      await showToast(tab.id, `✓ ${tripName}`)
+    } else {
+      // Saved to library only
+      const countryName = country?.name || 'Library'
+      await showToast(tab.id, `✓ ${countryName} Library`)
     }
+    
+    // Notify popup if open
+    chrome.runtime.sendMessage({
+      type: 'CAPTURES_UPDATED',
+    }).catch(() => {
+      // Popup not open, that's fine
+    })
+    
+  } catch (error) {
+    console.error('Failed to save:', error)
+    showToast(tab.id, '❌ Failed to save. Check connection.')
   }
 })
 
-// Keep service worker alive (Manifest V3 requirement)
+/**
+ * Show toast notification on the page with retry logic
+ */
+async function showToast(tabId: number, message: string) {
+  // Retry up to 3 times (content script might not be ready)
+  for (let i = 0; i < 3; i++) {
+    try {
+      await chrome.tabs.sendMessage(tabId, {
+        type: 'SHOW_TOAST',
+        payload: {
+          message,
+          duration: 3000,
+        },
+      })
+      return // Success!
+    } catch (error) {
+      if (i < 2) {
+        // Wait 100ms before retry
+        await new Promise(resolve => setTimeout(resolve, 100))
+      } else {
+        console.warn('Toast failed after 3 retries:', error)
+      }
+    }
+  }
+}
+
+// Listen for settings updates to refresh context menu
+chrome.runtime.onMessage.addListener((message) => {
+  if (message.type === 'SETTINGS_UPDATED') {
+    updateContextMenus()
+  }
+  return true
+})
+
+// Keep service worker alive
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.type === 'PING') {
     sendResponse({ status: 'ok' })
@@ -72,4 +198,3 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 })
 
 export {}
-
