@@ -1,0 +1,274 @@
+# Debugging Guide - Phase 0.3 AI Pipeline
+
+**Use this to trace the complete save workflow and find where issues occur.**
+
+---
+
+## Complete Log Flow (Expected)
+
+When you right-click and save, you should see logs in this exact order across all consoles:
+
+### 1. Extension Background Console
+```
+[BG] ========== SAVE STARTED ==========
+[BG] Menu ID: save-to-trip (or save-to-library)
+[BG] Selected text length: 45
+[BG] Tab URL: https://reddit.com/...
+[BG] Getting user settings...
+[BG] User ID: 55f2b33e...
+[BG] Default country ID: 43fa693a...
+[BG] Fetching countries...
+[BG] Country: Japan
+[BG] Requesting rich context from content script...
+```
+
+### 2. Content Script Console (On the webpage)
+```
+[Content] Received message: CAPTURE_RICH_CONTEXT
+[Content] Starting rich context capture...
+[Content] Selection length: 45
+[Context Capture] Platform: reddit, Estimated tokens: 627/800
+[Content] Context captured: 627 tokens
+[Content] Platform: reddit
+```
+
+### 3. Back to Extension Background Console
+```
+[BG] Content script response: {success: true, context: {...}}
+[BG] ✅ Rich context captured: 627 tokens
+[BG] Platform: reddit
+[BG] Calling backend API...
+[BG] Has rich context: true
+[API Client] Saving location...
+[API Client] URL: http://localhost:3000/api/locations
+[API Client] Data keys: ["userId", "countryId", "name", ...]
+[API Client] Has originalContext: true
+[API Client] Response status: 201
+[API Client] ✅ Success - Location ID: e710a9a7...
+[API Client] Processing status: pending
+[BG] ✅ Location created: e710a9a7...
+[BG] Processing status: pending
+[BG] ========== SAVE ENDED ==========
+```
+
+### 4. Backend Console
+```
+[API] ========== POST /api/locations ==========
+[API] Request body keys: ["userId", "countryId", "name", ...]
+[API] Has originalContext: true
+[API] User ID: 55f2b33e...
+[API] ✅ Validation passed
+[API] ✅ User ensured
+[API] Inserting location to Supabase...
+[API] ✅ Location created: e710a9a7...
+[API] Triggering Inngest job...
+[API] Event name: location/created
+[API] Location ID: e710a9a7...
+[API] Has INNGEST_EVENT_KEY: false (or true)
+[API] ✅ Inngest event sent successfully!
+[API] ========== Responding 201 Created ==========
+```
+
+### 5. Inngest Dashboard (http://localhost:8288)
+- **Events tab:** New `location/created` event appears
+- **Runs tab:** Job starts running
+- **Click the run:** See 3 steps execute
+
+---
+
+## Where Issues Occur
+
+### Issue: No Content Script Logs
+
+**Problem:** Don't see `[Content] Received message`
+
+**Causes:**
+1. Content script not injected on that page
+2. Page refreshed after extension install (refresh needed)
+3. Content script crashed
+
+**Fix:**
+- Refresh the webpage after loading extension
+- Check webpage console for errors
+- Verify content script in `chrome://extensions/` → Inspect views
+
+---
+
+### Issue: "Receiving end does not exist"
+
+**Problem:** Background can't reach content script
+
+**Fixed by:** IIFE pattern in content script ✅
+
+**If still occurs:**
+- Content script not loaded yet
+- Try saving again after page fully loads
+
+---
+
+### Issue: No Backend Logs
+
+**Problem:** Don't see `[API] ========== POST /api/locations`
+
+**Causes:**
+1. Backend not running
+2. CORS blocking request
+3. Wrong API URL
+4. Network error
+
+**Check:**
+- Is `pnpm run dev` running in backend?
+- Visit http://localhost:3000/api/health manually
+- Check browser Network tab for failed requests
+
+---
+
+### Issue: No Inngest Events
+
+**Problem:** Event sent but not in Inngest dashboard
+
+**Causes:**
+1. Inngest dev server not running
+2. Event sent to cloud instead of local
+3. Inngest send failed
+
+**Check:**
+- Is `npx inngest-cli dev` running?
+- Dashboard at http://localhost:8288 works?
+- Backend logs show "Inngest event sent successfully"?
+
+**If "Inngest send failed":**
+- Check error message in backend console
+- Might be network issue
+- Inngest client config issue
+
+---
+
+## Debugging Commands
+
+### Test Content Script
+
+**In webpage console:**
+```javascript
+// Check if content script is loaded
+console.log('Chrome runtime:', !!window.chrome?.runtime)
+
+// Test message passing
+chrome.runtime.sendMessage({ type: 'PING' }, (response) => {
+  console.log('Response:', response)
+})
+```
+
+### Test Backend
+
+```bash
+# Health check
+curl http://localhost:3000/api/health
+
+# Should return:
+{"status":"ok","database":"connected"}
+```
+
+### Check Inngest
+
+```bash
+# Visit dashboard
+open http://localhost:8288
+
+# Should see:
+# - Functions tab: process-location listed
+# - Events tab: Any events that were sent
+```
+
+---
+
+## SQL to Run in Supabase
+
+**Mark old locations complete:**
+```sql
+UPDATE locations 
+SET processing_status = 'complete'
+WHERE processing_status IN ('pending', 'processing')
+  AND original_context IS NULL;
+```
+
+**Add original_context column (if not exists):**
+```sql
+ALTER TABLE locations 
+ADD COLUMN IF NOT EXISTS original_context JSONB;
+```
+
+**Check current status:**
+```sql
+SELECT 
+  processing_status,
+  COUNT(*) as count,
+  COUNT(CASE WHEN original_context IS NOT NULL THEN 1 END) as with_context
+FROM locations 
+GROUP BY processing_status;
+```
+
+---
+
+## What Each Console Shows
+
+### Extension Background Console
+**Where:** `chrome://extensions/` → Travel Companion → "Inspect views: service worker"
+
+**Shows:**
+- Save workflow start to end
+- Rich context capture
+- API calls
+- Toast attempts
+
+### Content Script Console
+**Where:** Any webpage → F12 → Console tab
+
+**Shows:**
+- Message received from background
+- Context capture process
+- Platform detection
+- Token estimation
+
+### Backend Console
+**Where:** Terminal where `pnpm run dev` runs
+
+**Shows:**
+- API requests received
+- Database operations
+- Inngest event sending
+- Errors and successes
+
+### Inngest Dashboard
+**Where:** http://localhost:8288
+
+**Shows:**
+- Events received
+- Jobs running/complete/failed
+- Step-by-step execution
+- Retries
+
+---
+
+## Success Indicators
+
+✅ **All logs appear in sequence**  
+✅ **No red error messages**  
+✅ **Inngest dashboard shows event**  
+✅ **Job completes (or fails with clear error)**  
+✅ **Location card shows "Processing..." then updates**  
+
+---
+
+## If It Still Doesn't Work
+
+**Share:**
+1. Extension background console logs (full output)
+2. Backend console logs (full output)
+3. Inngest dashboard screenshot
+4. Any error messages
+
+**And I can pinpoint the exact issue!**
+
+All logging is now in place for complete traceability. 🔍
+

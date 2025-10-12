@@ -29,8 +29,42 @@ export function LocationCard({ location, context, days, onAction }: LocationCard
   // This would come from API in real implementation
   const tripCount = 0 // TODO: Get from API
   
+  // Only show processing banner for locations that will actually be AI processed
+  const hasContext = (location as any).original_context !== null && (location as any).original_context !== undefined
+  const isRecent = new Date(location.created_at).getTime() > Date.now() - (10 * 60 * 1000) // Last 10 minutes
+  const shouldShowProcessing = 
+    (location.processing_status === 'pending' || location.processing_status === 'processing') &&
+    (hasContext || isRecent)
+  
   return (
     <div className="bg-white border border-gray-300 rounded-lg overflow-hidden shadow-card hover:shadow-card-hover transition-shadow duration-200">
+      {/* Processing Status Banner - Only for locations being AI processed */}
+      {shouldShowProcessing && location.processing_status === 'pending' && (
+        <div className="bg-blue-50 border-b border-blue-200 px-4 py-2">
+          <div className="flex items-center gap-2 text-sm text-blue-700">
+            <div className="animate-spin">⏳</div>
+            <span>Processing...</span>
+          </div>
+        </div>
+      )}
+      
+      {shouldShowProcessing && location.processing_status === 'processing' && (
+        <div className="bg-blue-50 border-b border-blue-200 px-4 py-2">
+          <div className="flex items-center gap-2 text-sm text-blue-700">
+            <div className="animate-pulse">🔄</div>
+            <span>Processing...</span>
+          </div>
+        </div>
+      )}
+      
+      {location.processing_status === 'error' && hasContext && (
+        <div className="bg-red-50 border-b border-red-200 px-4 py-2">
+          <div className="text-sm text-red-700">
+            ⚠️ Processing failed - showing raw save
+          </div>
+        </div>
+      )}
+      
       {/* Header */}
       <div className="flex items-start justify-between p-4 pb-2">
         <div className="flex items-center gap-2 flex-1">

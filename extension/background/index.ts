@@ -88,14 +88,28 @@ async function updateContextMenus() {
 
 // Handle context menu clicks
 chrome.contextMenus.onClicked.addListener(async (info, tab) => {
-  if (!info.selectionText || !tab?.id) return
+  console.log('[BG] ========== SAVE STARTED ==========')
+  console.log('[BG] Menu ID:', info.menuItemId)
+  console.log('[BG] Selected text length:', info.selectionText?.length)
+  console.log('[BG] Tab URL:', tab?.url)
+  
+  if (!info.selectionText || !tab?.id) {
+    console.error('[BG] Missing selection or tab')
+    return
+  }
   
   try {
+    // Get settings
+    console.log('[BG] Getting user settings...')
     const userId = await getUserId()
     const settings = await getSettings()
     const defaultCountryId = settings?.defaultCountryId
     
+    console.log('[BG] User ID:', userId)
+    console.log('[BG] Default country ID:', defaultCountryId)
+    
     if (!defaultCountryId) {
+      console.error('[BG] Default country not set!')
       throw new Error('Default country not set. Please configure in settings.')
     }
     
@@ -103,10 +117,27 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
     const finalCountryId = defaultCountryId
     
     // Get country info for toast message
+    console.log('[BG] Fetching countries...')
     const countries = await api.getCountries()
     const country = countries.find((c: any) => c.id === finalCountryId)
+    console.log('[BG] Country:', country?.name)
     
-    // Create location in pool
+    // Take screenshot (no content script needed!)
+    console.log('[BG] Taking screenshot...')
+    let screenshot = null
+    try {
+      screenshot = await chrome.tabs.captureVisibleTab(tab.windowId, {
+        format: 'png'
+      })
+      console.log('[BG] ✅ Screenshot captured, size:', screenshot.length, 'chars')
+    } catch (error) {
+      console.error('[BG] Screenshot failed:', error)
+    }
+    
+    // Create location in pool with screenshot
+    console.log('[BG] Calling backend API...')
+    console.log('[BG] Has screenshot:', !!screenshot)
+    
     const location = await api.saveLocation({
       userId,
       countryId: finalCountryId,
@@ -114,9 +145,11 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
       originalText: info.selectionText,
       sourceUrl: tab.url || '',
       pageTitle: tab.title || 'Untitled',
+      screenshot: screenshot, // Phase 0.3: Screenshot for AI vision
     })
     
-    console.log('Location created:', location.id)
+    console.log('[BG] ✅ Location created:', location.id)
+    console.log('[BG] Processing status:', location.processing_status)
     
     // If saving to trip, link it
     if (info.menuItemId === MENU_ID_TRIP && settings?.defaultTripId) {
@@ -150,8 +183,10 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
     })
     
   } catch (error) {
-    console.error('Failed to save:', error)
-    showToast(tab.id, '❌ Failed to save. Check connection.')
+    console.error('[BG] ❌ SAVE FAILED:', error)
+    await showToast(tab.id, '❌ Failed to save. Check connection.')
+  } finally {
+    console.log('[BG] ========== SAVE ENDED ==========')
   }
 })
 

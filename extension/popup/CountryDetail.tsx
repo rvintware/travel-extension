@@ -26,6 +26,22 @@ export function CountryDetail({ country, onBack, onAddToTrip, onDelete }: Countr
     loadLocations()
   }, [country.id])
   
+  // Poll for processing locations
+  useEffect(() => {
+    const hasPending = locations.some(l => 
+      l.processing_status === 'pending' || l.processing_status === 'processing'
+    )
+    
+    if (hasPending) {
+      console.log('[CountryDetail] Polling for processing locations...')
+      const interval = setInterval(() => {
+        loadLocations() // Refresh to get updated statuses
+      }, 3000) // Poll every 3 seconds
+      
+      return () => clearInterval(interval)
+    }
+  }, [locations])
+  
   async function loadLocations() {
     try {
       const userId = await getUserId()

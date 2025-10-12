@@ -27,6 +27,22 @@ export function TripDetail({ trip, onBack }: TripDetailProps) {
     loadTripLocations()
   }, [trip.id])
   
+  // Poll for processing locations
+  useEffect(() => {
+    const hasPending = locations.some(l => 
+      l.processing_status === 'pending' || l.processing_status === 'processing'
+    )
+    
+    if (hasPending) {
+      console.log('[TripDetail] Polling for processing locations...')
+      const interval = setInterval(() => {
+        loadTripLocations() // Refresh to get updated statuses
+      }, 3000) // Poll every 3 seconds
+      
+      return () => clearInterval(interval)
+    }
+  }, [locations])
+  
   async function loadTripLocations() {
     try {
       const data = await api.getTripLocations(trip.id)

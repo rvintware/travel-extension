@@ -2,6 +2,7 @@ import { NextResponse } from 'next/server'
 import { supabase, ensureUser } from '@/lib/supabase'
 import { createLocationSchema } from '@/lib/validation'
 import { handleError, badRequest } from '@/lib/errors'
+import { inngest } from '@/lib/inngest'
 
 /**
  * Create a new location
@@ -10,16 +11,25 @@ import { handleError, badRequest } from '@/lib/errors'
  * Body: { userId, countryId, name, originalText, sourceUrl, pageTitle?, category? }
  */
 export async function POST(request: Request) {
+  console.log('[API] ========== POST /api/locations ==========')
+  
   try {
     const body = await request.json()
+    console.log('[API] Request body keys:', Object.keys(body))
+    console.log('[API] Has screenshot:', !!body.screenshot)
+    console.log('[API] Screenshot size:', body.screenshot?.length || 0, 'chars')
+    console.log('[API] User ID:', body.userId?.substring(0, 8) + '...')
     
     // Validate input
     const validated = createLocationSchema.parse(body)
+    console.log('[API] ✅ Validation passed')
     
     // Ensure user exists
     await ensureUser(validated.userId)
+    console.log('[API] ✅ User ensured')
     
-    // Insert location
+    // Insert location with pending status (will be enriched by AI)
+    console.log('[API] Inserting location to Supabase...')
     const { data, error } = await supabase
       .from('locations')
       .insert({
@@ -30,6 +40,7 @@ export async function POST(request: Request) {
         source_url: validated.sourceUrl,
         page_title: validated.pageTitle,
         category: validated.category,
+        original_context: null, // Not storing complex context anymore
         source_type: 'single_save',
         processing_status: 'pending',
         location_verified: false,
@@ -38,12 +49,46 @@ export async function POST(request: Request) {
       .select()
       .single()
     
-    if (error) throw error
+    if (error) {
+      console.error('[API] ❌ Supabase insert error:', error)
+      throw error
+    }
     
+    console.log('[API] ✅ Location created:', data.id)
+    
+    // Phase 0.3: Trigger AI processing job with screenshot
+    if (body.screenshot) {
+      console.log('[API] Triggering Inngest job with screenshot...')
+      console.log('[API] Event name: location/created')
+      console.log('[API] Location ID:', data.id)
+      console.log('[API] Screenshot size:', body.screenshot.length, 'chars')
+      
+      try {
+        await inngest.send({
+          name: 'location/created',
+          data: {
+            locationId: data.id,
+            screenshot: body.screenshot,
+            selectedText: validated.originalText,
+            url: validated.sourceUrl,
+            pageTitle: validated.pageTitle || 'Untitled'
+          }
+        })
+        console.log('[API] ✅ Inngest event sent successfully!')
+      } catch (error) {
+        console.error('[API] ❌ Inngest send failed:', error)
+        // Don't fail the request - location is saved, just won't be enriched
+      }
+    } else {
+      console.log('[API] ⚠️ No screenshot - skipping AI processing')
+    }
+    
+    console.log('[API] ========== Responding 201 Created ==========')
     return NextResponse.json({ 
       location: data 
     }, { status: 201 })
   } catch (error) {
+    console.error('[API] ❌ Request failed:', error)
     return handleError(error)
   }
 }

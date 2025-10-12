@@ -9,6 +9,7 @@ export const createLocationSchema = z.object({
   sourceUrl: z.string().url('Invalid source URL'),
   pageTitle: z.string().optional(),
   category: z.string().optional(),
+  screenshot: z.string().optional(), // Base64 screenshot for AI vision
 })
 
 export const updateLocationSchema = z.object({

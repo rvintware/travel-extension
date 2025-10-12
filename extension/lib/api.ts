@@ -44,14 +44,37 @@ export async function saveLocation(data: {
   sourceUrl: string
   pageTitle?: string
   category?: string
+  screenshot?: string  // Phase 0.3: Screenshot for AI vision processing
 }) {
-  const response = await fetch(`${API_URL}/api/locations`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify(data)
-  })
-  const result = await handleResponse<{ location: any }>(response)
-  return result.location
+  console.log('[API Client] Saving location...')
+  console.log('[API Client] URL:', `${API_URL}/api/locations`)
+  console.log('[API Client] Data keys:', Object.keys(data))
+  console.log('[API Client] Has screenshot:', !!data.screenshot)
+  
+  try {
+    const response = await fetch(`${API_URL}/api/locations`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(data)
+    })
+    
+    console.log('[API Client] Response status:', response.status)
+    
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({ error: 'Unknown error' }))
+      console.error('[API Client] API error:', errorData)
+      throw new Error(errorData.error || `HTTP ${response.status}`)
+    }
+    
+    const result = await handleResponse<{ location: any }>(response)
+    console.log('[API Client] ✅ Success - Location ID:', result.location.id)
+    console.log('[API Client] Processing status:', result.location.processing_status)
+    
+    return result.location
+  } catch (error) {
+    console.error('[API Client] ❌ Request failed:', error)
+    throw error
+  }
 }
 
 /**
