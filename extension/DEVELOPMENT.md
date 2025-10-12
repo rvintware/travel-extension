@@ -1,0 +1,284 @@
+# Development Guide - Travel Companion Extension
+
+## Prerequisites
+
+- Node.js 18+ installed
+- pnpm installed (we set this up in `~/.npm-global/bin`)
+- Chrome browser
+- Basic knowledge of React and TypeScript
+
+## Setup
+
+### 1. Install Dependencies
+
+```bash
+cd extension
+export PATH=~/.npm-global/bin:$PATH
+pnpm install
+```
+
+### 2. Development Build
+
+```bash
+pnpm run dev
+```
+
+This starts a development server with hot reload. The extension will be built in `build/chrome-mv3-dev/`.
+
+### 3. Load Extension in Chrome
+
+1. Open Chrome
+2. Navigate to `chrome://extensions/`
+3. Enable "Developer mode" (toggle in top-right corner)
+4. Click "Load unpacked"
+5. Select `extension/build/chrome-mv3-dev` folder
+6. The extension should now appear in your toolbar
+
+**Tip**: Pin the extension to your toolbar by clicking the puzzle icon → Pin
+
+## Testing
+
+### Manual Testing Workflow
+
+1. **Test Context Menu**:
+   - Go to any webpage (e.g., reddit.com/r/travel)
+   - Highlight some text
+   - Right-click → Should see "⭐ Save to My Trips"
+   - Click it → Green toast should appear
+
+2. **Test Popup**:
+   - Click the extension icon in toolbar
+   - Should see the saved capture
+   - Verify text, URL, and timestamp display correctly
+
+3. **Test Delete**:
+   - Click "🗑️ Delete" on a capture
+   - Item should disappear immediately
+   - Verify it's gone after closing and reopening popup
+
+4. **Test Persistence**:
+   - Save a few captures
+   - Close browser completely
+   - Reopen browser
+   - Click extension icon
+   - All captures should still be there
+
+### Test Websites
+
+Good sites for testing:
+- **Reddit**: r/travel, r/JapanTravel, r/solotravel
+- **Blogs**: nomadicmatt.com, thepointsguy.com
+- **Hacker News**: news.ycombinator.com
+
+### Edge Cases to Test
+
+- [ ] Very long text (1000+ characters)
+- [ ] Text with emojis and special characters
+- [ ] Multiple rapid saves
+- [ ] Save with no page title
+- [ ] Delete all captures
+- [ ] 50+ captures (test scrolling)
+
+## Debugging
+
+### View Logs
+
+**Background Script Logs**:
+1. Go to `chrome://extensions/`
+2. Click "Inspect views: service worker" under Travel Companion
+3. Console will show background script logs
+
+**Popup Logs**:
+1. Right-click the extension icon → Click "Inspect"
+2. DevTools will open for the popup
+3. Console shows popup React logs
+
+**Content Script Logs**:
+1. Open DevTools on any webpage (F12)
+2. Console shows content script logs
+
+### Common Issues
+
+**Extension not appearing**:
+- Make sure "Developer mode" is enabled
+- Check that you selected the correct folder (`build/chrome-mv3-dev`)
+- Try refreshing the extension (click refresh icon)
+
+**Right-click menu not working**:
+- Refresh the webpage after installing extension
+- Make sure text is highlighted
+- Check background script console for errors
+
+**Toast not appearing**:
+- Content script might not be injected yet
+- Refresh the page and try again
+- Check console for CSP errors (some sites block injected content)
+
+**Popup not updating**:
+- Check if storage event listeners are working
+- Verify chrome.storage.local has data (check in background console)
+- Try clicking extension icon to close/reopen
+
+## Development Tips
+
+### Hot Reload
+
+With `pnpm run dev`, changes to most files will auto-reload:
+- ✅ Popup files (popup.tsx, components) - instant reload
+- ✅ Content scripts - reload page to see changes
+- ❌ Background script - requires extension refresh
+
+### Inspecting Storage
+
+In background script console:
+```javascript
+// View all captures
+chrome.storage.local.get('captures', console.log)
+
+// Clear all data
+chrome.storage.local.clear()
+
+// Get user ID
+chrome.storage.local.get('userId', console.log)
+```
+
+### Force Extension Reload
+
+After changing background script:
+1. Go to `chrome://extensions/`
+2. Click the refresh icon under Travel Companion
+3. Refresh any open webpages
+
+## Project Structure
+
+```
+extension/
+├── popup.tsx                 # Main popup UI (React)
+├── style.css                 # Tailwind CSS styles
+├── package.json              # Dependencies and scripts
+├── tailwind.config.js        # Tailwind configuration
+├── tsconfig.json             # TypeScript configuration
+│
+├── components/               # Reusable React components
+│   ├── CaptureCard.tsx      # Individual location card
+│   ├── EmptyState.tsx       # Empty state UI
+│   └── Button.tsx           # Button component
+│
+├── background/               # Background service worker
+│   └── index.ts             # Context menu & storage logic
+│
+├── contents/                 # Content scripts (injected into pages)
+│   └── index.tsx            # Toast notifications
+│
+├── lib/                      # Shared utilities
+│   ├── types.ts             # TypeScript interfaces
+│   ├── storage.ts           # chrome.storage helpers
+│   └── utils.ts             # Utility functions
+│
+├── assets/                   # Images and icons
+│   └── icon.png             # Extension icon (128x128)
+│
+└── build/                    # Generated by Plasmo (gitignored)
+    ├── chrome-mv3-dev/      # Development build
+    └── chrome-mv3-prod/     # Production build
+```
+
+## Key Files
+
+### popup.tsx
+Main UI. Loads captures from storage and displays them.
+
+### background/index.ts
+Service worker that:
+- Creates context menu on install
+- Handles right-click saves
+- Manages chrome.storage
+
+### contents/index.tsx
+Content script that shows toast notifications on web pages.
+
+### lib/storage.ts
+Wrapper functions for chrome.storage.local API.
+
+## Making Changes
+
+### Adding a New Component
+
+1. Create file in `components/MyComponent.tsx`
+2. Import and use in `popup.tsx`
+3. Component will hot-reload automatically
+
+### Modifying Storage Schema
+
+1. Update types in `lib/types.ts`
+2. Update storage functions in `lib/storage.ts`
+3. Migration: Users may need to clear storage
+
+### Changing Context Menu
+
+1. Edit `background/index.ts`
+2. Modify `chrome.contextMenus.create()` call
+3. Refresh extension in `chrome://extensions/`
+
+### Updating Styles
+
+1. Edit `style.css` or component className
+2. Use Tailwind utility classes
+3. Custom colors defined in `tailwind.config.js`
+
+## Production Build
+
+```bash
+pnpm run build
+```
+
+Creates optimized build in `build/chrome-mv3-prod/`.
+
+To test production build:
+1. Remove dev extension from Chrome
+2. Load `build/chrome-mv3-prod/` folder
+3. Test thoroughly
+
+## Performance
+
+### Measuring Load Time
+
+```javascript
+// In popup.tsx
+console.time('load')
+// ... after captures loaded
+console.timeEnd('load')
+```
+
+Target: < 300ms
+
+### Checking Storage Size
+
+```javascript
+// In background console
+chrome.storage.local.getBytesInUse(null, console.log)
+```
+
+Limit: ~10MB for chrome.storage.local
+
+## Preparing for Phase 0.2
+
+When ready to add backend:
+
+1. Keep all existing code
+2. Add `lib/api.ts` for API calls
+3. Update `lib/storage.ts` to call API
+4. Add loading/error states to UI
+5. Minimal changes to components
+
+## Resources
+
+- [Plasmo Documentation](https://docs.plasmo.com/)
+- [Chrome Extension API](https://developer.chrome.com/docs/extensions/reference/)
+- [Tailwind CSS Docs](https://tailwindcss.com/docs)
+- [React Docs](https://react.dev/)
+
+## Questions?
+
+Check the main [README.md](./README.md) or review the [System Design Specification](../artifacts/system_design_specification.md).
+
