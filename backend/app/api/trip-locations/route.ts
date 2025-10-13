@@ -16,6 +16,31 @@ export async function POST(request: Request) {
     // Validate input
     const validated = linkLocationToTripSchema.parse(body)
     
+    // Get location's country
+    const { data: location } = await supabase
+      .from('locations')
+      .select('country_id')
+      .eq('id', validated.locationId)
+      .single()
+    
+    // Auto-add country to trip if not already there
+    if (location?.country_id) {
+      const { data: existingCountry } = await supabase
+        .from('trip_countries')
+        .select('id')
+        .eq('trip_id', validated.tripId)
+        .eq('country_id', location.country_id)
+        .maybeSingle()
+      
+      if (!existingCountry) {
+        console.log('[API] Auto-adding country to trip')
+        await supabase.from('trip_countries').insert({
+          trip_id: validated.tripId,
+          country_id: location.country_id
+        })
+      }
+    }
+    
     // Insert trip_location link
     const { data, error } = await supabase
       .from('trip_locations')

@@ -8,8 +8,8 @@ interface TripCardProps {
 }
 
 export function TripCard({ trip, onClick }: TripCardProps) {
-  const emoji = trip.country?.emoji || '🌐'
   const locationCount = trip.locationCount || 0
+  const countryCount = (trip as any).countryCount || 0
   
   // Format duration
   const duration = trip.duration_days 
@@ -28,13 +28,13 @@ export function TripCard({ trip, onClick }: TripCardProps) {
     >
       <div className="flex items-start justify-between">
         <div className="flex-1">
-          <div className="flex items-center gap-2 mb-1">
-            <span className="text-2xl">{emoji}</span>
+          <div className="mb-1">
             <h3 className="font-semibold text-gray-900 text-xl">{trip.name}</h3>
           </div>
           <div className="flex items-center gap-2 text-sm text-gray-600">
             {trip.is_active && <span className="text-primary font-medium">Active</span>}
-            {duration && <span>{duration}</span>}
+            {countryCount > 0 && <span>{countryCount} {countryCount === 1 ? 'country' : 'countries'}</span>}
+            {duration && <span>· {duration}</span>}
             {dates && <span>· {dates}</span>}
           </div>
         </div>

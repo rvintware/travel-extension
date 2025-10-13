@@ -21,6 +21,7 @@ export function Settings({ countries, trips, onBack, onSave }: SettingsProps) {
   const [isDeleting, setIsDeleting] = useState(false)
   const [locationCount, setLocationCount] = useState(0)
   const [tripCount, setTripCount] = useState(0)
+  const [availableCountries, setAvailableCountries] = useState<Country[]>([])
   
   useEffect(() => {
     loadSettings()
@@ -58,8 +59,19 @@ export function Settings({ countries, trips, onBack, onSave }: SettingsProps) {
       ])
       setLocationCount(locations.length)
       setTripCount(trips.length)
+      
+      // Filter to only countries with locations
+      const usedCountryIds = [...new Set(
+        locations.map(loc => loc.country_id).filter(Boolean)
+      )]
+      
+      const available = countries.filter(c => usedCountryIds.includes(c.id))
+      
+      console.log('[Settings] Available countries:', available.length, 'from', locations.length, 'locations')
+      setAvailableCountries(available)
     } catch (error) {
       console.error('Failed to load counts:', error)
+      setAvailableCountries([])
     }
   }
   
@@ -131,20 +143,38 @@ export function Settings({ countries, trips, onBack, onSave }: SettingsProps) {
           <label className="block text-sm font-medium text-gray-900 mb-2">
             Default Country
           </label>
-          <select
-            value={settings.defaultCountryId}
-            onChange={(e) => setSettings({ ...settings, defaultCountryId: e.target.value })}
-            className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-primary"
-          >
-            {countries.map(country => (
-              <option key={country.id} value={country.id}>
-                {country.emoji} {country.name}
-              </option>
-            ))}
-          </select>
-          <p className="text-xs text-gray-500 mt-1">
-            Used when country can't be auto-detected
-          </p>
+          
+          {availableCountries.length === 0 ? (
+            <>
+              <select
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-gray-50"
+                disabled
+              >
+                <option>No countries available</option>
+              </select>
+              <p className="text-xs text-gray-500 mt-1">
+                💡 Save some locations first to select a default country
+              </p>
+            </>
+          ) : (
+            <>
+              <select
+                value={settings.defaultCountryId}
+                onChange={(e) => setSettings({ ...settings, defaultCountryId: e.target.value })}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary focus:border-primary"
+              >
+                <option value="">Select country...</option>
+                {availableCountries.map(country => (
+                  <option key={country.id} value={country.id}>
+                    {country.emoji} {country.name}
+                  </option>
+                ))}
+              </select>
+              <p className="text-xs text-gray-500 mt-1">
+                Used when country can't be auto-detected
+              </p>
+            </>
+          )}
         </div>
         
         {/* Default Trip */}

@@ -178,8 +178,8 @@ function IndexPopup() {
   }
   
   function handleNewTrip() {
-    // TODO: Open new trip modal
-    console.log('Create new trip')
+    // Reload trips after creation
+    loadDataWithCache()
   }
   
   function handleAddToTrip(location: Location) {
@@ -249,6 +249,7 @@ function IndexPopup() {
         {activeTab === 'trips' ? (
           <TripsView
             trips={trips}
+            countries={countries}
             onTripClick={handleTripClick}
             onNewTrip={handleNewTrip}
           />

@@ -122,7 +122,20 @@ export const processLocation = inngest.createFunction(
       console.log('[Job] Multiple locations - creating separate entries')
       
       const locations = await step.run('extract-multiple', async () => {
-        return await extractMultipleLocations(screenshot, selectedText, url)
+        const extracted = await extractMultipleLocations(screenshot, selectedText, url)
+        
+        // Layer 2: Code deduplication (case-insensitive by normalized name)
+        const unique = Array.from(
+          new Map(
+            extracted.map(loc => [
+              loc.location_name.toLowerCase().trim(),
+              loc
+            ])
+          ).values()
+        )
+        
+        console.log(`[Job] Extracted ${extracted.length}, unique: ${unique.length}`)
+        return unique
       })
       
       const created = await step.run('create-all-locations', async () => {
@@ -134,6 +147,34 @@ export const processLocation = inngest.createFunction(
           // Google Places validation
           const place = await searchGooglePlaces(loc.location_name)
           console.log(`[Job] Google found:`, !!place)
+          
+          // Layer 3: Database check - prevent duplicates
+          if (place?.place_id) {
+            const { data: existingByPlaceId } = await supabase
+              .from('locations')
+              .select('id, name')
+              .eq('user_id', userId)
+              .eq('place_id', place.place_id)
+              .maybeSingle()
+            
+            if (existingByPlaceId) {
+              console.log(`[Job] Location exists (place_id: ${place.place_id}), skipping`)
+              continue
+            }
+          }
+          
+          // Also check by normalized name (fallback if no place_id)
+          const { data: existingByName } = await supabase
+            .from('locations')
+            .select('id, name')
+            .eq('user_id', userId)
+            .ilike('name', loc.location_name)
+            .maybeSingle()
+          
+          if (existingByName) {
+            console.log(`[Job] Location exists by name: ${existingByName.name}, skipping`)
+            continue
+          }
           
           // Create new location (verified if Google found it)
           const { data: newLoc } = await supabase

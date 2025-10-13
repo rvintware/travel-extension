@@ -127,15 +127,22 @@ export async function countLocations(
             type: 'text',
             text: `⚠️ IMPORTANT: 
 - The screenshot is for VISUAL CONTEXT ONLY
-- COUNT locations mentioned in the HIGHLIGHTED TEXT ONLY
+- COUNT DISTINCT locations mentioned in the HIGHLIGHTED TEXT ONLY
 - DO NOT count locations from other parts of the screenshot
+- If same location mentioned multiple times, count it ONCE
 
 User highlighted this text: "${selectedText}"
 
-Count how many DISTINCT locations are mentioned in THIS HIGHLIGHTED TEXT.
+Count how many DISTINCT/UNIQUE locations are mentioned in THIS HIGHLIGHTED TEXT.
+
+IMPORTANT - Deduplication rules:
+- "Tokyo" mentioned 3 times → Count: 1
+- "Tokyo Tower" mentioned twice → Count: 1
+- "Tokyo" and "Tokyo Tower" → Count: 2 (different places)
+- "Senso-ji" and "Senso-ji Temple" → Count: 1 (same place)
 
 The screenshot helps you see the page layout and understand context,
-but you should ONLY count locations that appear in the highlighted text above.
+but you should ONLY count UNIQUE locations that appear in the highlighted text above.
 
 A location can be:
 ✅ Cities (Tokyo, Kyoto)
@@ -144,11 +151,12 @@ A location can be:
 
 Examples:
 - Highlighted text: "Disney Sea seems well-regarded" → 1 (Disney Sea)
-- Highlighted text: "Tokyo, Kyoto, Osaka" → 3
-- Highlighted text: "this place is amazing" → 1 (use screenshot to identify "this place")
+- Highlighted text: "Tokyo, Tokyo, Tokyo" → 1 (same place mentioned 3x)
+- Highlighted text: "Tokyo, Kyoto, Osaka" → 3 (distinct cities)
+- Highlighted text: "Tokyo and Tokyo Tower" → 2 (different places)
 
 Screenshot may show many other locations → IGNORE THEM
-Count from: Highlighted text ONLY
+Count UNIQUE locations from: Highlighted text ONLY
 
 Return ONLY a number.`
           },
@@ -188,19 +196,28 @@ export async function extractMultipleLocations(
         content: [
           {
             type: 'text',
-            text: `⚠️ CRITICAL: Extract from HIGHLIGHTED TEXT ONLY.
+            text: `⚠️ CRITICAL: Extract DISTINCT/UNIQUE locations from HIGHLIGHTED TEXT ONLY.
 
 The screenshot is VISUAL CONTEXT. Do not extract locations visible in the screenshot that aren't mentioned in the highlighted text.
 
 User highlighted: "${selectedText}"
 
-Extract ALL locations mentioned in THIS TEXT.
-The screenshot helps you see the page, but extract ONLY from highlighted text.
+Extract ALL DISTINCT locations mentioned in THIS TEXT.
+- If "Paris" mentioned 3 times → Extract it ONCE
+- If "Tokyo" and "Tokyo Tower" mentioned → Extract BOTH (different places)
+- If "Senso-ji" and "Senso-ji Temple" → Extract ONCE (same place)
+
+The screenshot helps you see the page, but extract UNIQUE locations ONLY from highlighted text.
+
+Deduplication Rules:
+✅ Same location mentioned multiple times → Return ONCE
+✅ Similar names for same place → Return ONCE
+✅ Different places (Tokyo vs Tokyo Tower) → Return BOTH
 
 Example:
-- Highlighted: "Tokyo, Kyoto, Osaka"
+- Highlighted: "Tokyo, Tokyo, Kyoto, Tokyo, Osaka"
 - Screenshot shows: 20 other cities/places in thread → IGNORE THEM!
-- Extract: ONLY Tokyo, Kyoto, Osaka
+- Extract: Tokyo (1x), Kyoto (1x), Osaka (1x) ← 3 DISTINCT locations
 
 What to extract (from highlighted text):
 ✅ Cities, towns (Tokyo, Kyoto, Kamakura)
@@ -213,12 +230,13 @@ What NOT to extract:
 ❌ Day numbers ("Day 1")
 ❌ Durations ("3 days")
 ❌ Locations visible in screenshot but not in highlighted text
+❌ Duplicate mentions of same location
 
 Return as JSON:
 {
   "locations": [
     {
-      "location_name": "Exact name from highlighted text",
+      "location_name": "Exact name from highlighted text (deduplicated)",
       "category": "city/restaurant/temple/etc",
       "address": "If in highlighted text",
       "tips": ["From highlighted text only"],
@@ -227,8 +245,9 @@ Return as JSON:
   ]
 }
 
-Extract ONLY from: "${selectedText}" ← THIS TEXT ONLY
+Extract DISTINCT locations ONLY from: "${selectedText}" ← THIS TEXT ONLY
 Screenshot purpose: Visual context to understand ambiguous terms
+Return: UNIQUE locations only (no duplicates)
 
 Output valid JSON only.`
           },

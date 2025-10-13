@@ -133,23 +133,25 @@ export async function deleteLocation(locationId: string) {
 }
 
 /**
- * Create a new trip
+ * Create a new trip (supports multiple countries)
  */
 export async function createTrip(data: {
   userId: string
-  countryId: string
   name: string
-  description?: string
-  startDate?: string
-  endDate?: string
+  countryIds: string[]  // Array of country IDs
   durationDays?: number
+  isActive?: boolean
+  description?: string
 }) {
+  console.log('[API Client] Creating trip with', data.countryIds.length, 'countries')
+  
   const response = await fetch(`${API_URL}/api/trips`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify(data)
   })
   const result = await handleResponse<{ trip: any }>(response)
+  console.log('[API Client] ✅ Trip created:', result.trip.id)
   return result.trip
 }
 
