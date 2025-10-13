@@ -18,6 +18,7 @@ export function TripDetail({ trip, onBack }: TripDetailProps) {
   const [byDay, setByDay] = useState<Record<string | number, LocationWithTripData[]>>({})
   const [selectedDay, setSelectedDay] = useState<number | 'all' | 'unscheduled'>('all')
   const [loading, setLoading] = useState(true)
+  const [refreshing, setRefreshing] = useState(false)
   const [confirmDialog, setConfirmDialog] = useState<{
     isOpen: boolean
     location: LocationWithTripData | null
@@ -52,6 +53,17 @@ export function TripDetail({ trip, onBack }: TripDetailProps) {
       console.error('Failed to load trip locations:', error)
     } finally {
       setLoading(false)
+    }
+  }
+  
+  async function handleRefresh() {
+    setRefreshing(true)
+    try {
+      const data = await api.getTripLocations(trip.id)
+      setLocations(data.locations)
+      setByDay(data.byDay)
+    } finally {
+      setRefreshing(false)
     }
   }
   
@@ -170,13 +182,24 @@ export function TripDetail({ trip, onBack }: TripDetailProps) {
     <div className="flex flex-col h-full">
       {/* Header */}
       <div className="bg-white border-b border-gray-200 p-4 flex-shrink-0">
-        <button
-          onClick={onBack}
-          className="flex items-center gap-2 text-primary hover:text-primary-dark transition-colors mb-2"
-        >
-          <span>←</span>
-          <span className="font-medium">Back</span>
-        </button>
+        <div className="flex items-center justify-between mb-2">
+          <button
+            onClick={onBack}
+            className="flex items-center gap-2 text-primary hover:text-primary-dark transition-colors"
+          >
+            <span>←</span>
+            <span className="font-medium">Back</span>
+          </button>
+          
+          <button 
+            onClick={handleRefresh}
+            className="text-gray-600 hover:text-primary transition-colors"
+            disabled={refreshing}
+            title="Refresh"
+          >
+            <span className={refreshing ? 'animate-spin' : ''}>🔄</span>
+          </button>
+        </div>
         <div className="flex items-center justify-between">
           <div>
             <h1 className="text-lg font-semibold text-gray-900">{trip.name}</h1>

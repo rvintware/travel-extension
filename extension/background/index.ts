@@ -15,21 +15,14 @@ chrome.runtime.onInstalled.addListener(async () => {
   // Initialize default settings
   const settings = await getSettings()
   if (!settings) {
-    // Fetch countries and set first one as default
-    try {
-      const countries = await api.getCountries()
-      const japanCountry = countries.find((c: any) => c.code === 'JP')
-      
-      await chrome.storage.local.set({
-        settings: {
-          defaultCountryId: japanCountry?.id || countries[0]?.id,
-          defaultView: 'trips',
-          rememberLastTab: false,
-        }
-      })
-    } catch (error) {
-      console.error('Failed to fetch countries:', error)
-    }
+    await chrome.storage.local.set({
+      settings: {
+        defaultCountryId: null,  // No default country initially
+        defaultView: 'trips',
+        rememberLastTab: false,
+        defaultTripId: null,     // No default trip initially
+      }
+    })
   }
   
   // Create context menus
@@ -40,49 +33,66 @@ chrome.runtime.onInstalled.addListener(async () => {
  * Update context menus based on current settings
  */
 async function updateContextMenus() {
-  // Remove existing menus
-  await chrome.contextMenus.removeAll()
-  
-  const settings = await getSettings()
-  const defaultTrip = settings?.defaultTripId
-  
-  if (defaultTrip) {
-    // Try to get trip name
-    try {
-      const trip = await api.getTrip(defaultTrip)
-      chrome.contextMenus.create({
-        id: MENU_ID_TRIP,
-        title: `⭐ Save to ${trip.name}`,
-        contexts: ['selection'],
-      })
-    } catch (error) {
-      // Trip doesn't exist anymore, clear default
-      await setDefaultTrip(null)
+  try {
+    console.log('[BG] Updating context menus...')
+    
+    // Remove existing menus
+    await chrome.contextMenus.removeAll()
+    
+    const settings = await getSettings()
+    const defaultTrip = settings?.defaultTripId
+    const defaultCountryId = settings?.defaultCountryId
+    
+    // Show trip menu if default trip is set
+    if (defaultTrip) {
+      try {
+        const trip = await api.getTrip(defaultTrip)
+        console.log('[BG] Active trip:', trip.name)
+        
+        chrome.contextMenus.create({
+          id: MENU_ID_TRIP,
+          title: `⭐ Save to ${trip.name}`,
+          contexts: ['selection'],
+        })
+      } catch (error) {
+        console.error('[BG] Failed to fetch trip:', error)
+      }
     }
-  }
-  
-  // Always show library option
-  const defaultCountryId = settings?.defaultCountryId
-  if (defaultCountryId) {
-    try {
-      const countries = await api.getCountries()
-      const country = countries.find((c: any) => c.id === defaultCountryId)
-      const countryName = country?.name || 'Library'
-      const emoji = country?.emoji || '📚'
-      
+    
+    // 🔧 ALWAYS show library option (even without default country)
+    if (defaultCountryId) {
+      // User has set a default country - show it
+      try {
+        const countries = await api.getCountries()
+        const country = countries.find((c: any) => c.id === defaultCountryId)
+        const countryName = country?.name || 'Library'
+        const emoji = country?.emoji || '📚'
+        
+        chrome.contextMenus.create({
+          id: MENU_ID_LIBRARY,
+          title: `${emoji} Save to ${countryName} Library`,
+          contexts: ['selection'],
+        })
+      } catch (error) {
+        // Fallback to generic
+        chrome.contextMenus.create({
+          id: MENU_ID_LIBRARY,
+          title: '📚 Save to Library',
+          contexts: ['selection'],
+        })
+      }
+    } else {
+      // 🔧 NEW: No default country - show generic save option
       chrome.contextMenus.create({
         id: MENU_ID_LIBRARY,
-        title: `${emoji} Save to ${countryName} Library`,
-        contexts: ['selection'],
-      })
-    } catch (error) {
-      // Fallback
-      chrome.contextMenus.create({
-        id: MENU_ID_LIBRARY,
-        title: '📚 Save to Library',
+        title: '📍 Save Location',
         contexts: ['selection'],
       })
     }
+    
+    console.log('[BG] ✅ Context menus updated')
+  } catch (error) {
+    console.error('[BG] Failed to update context menus:', error)
   }
 }
 
@@ -103,18 +113,22 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
     console.log('[BG] Getting user settings...')
     const userId = await getUserId()
     const settings = await getSettings()
-    const defaultCountryId = settings?.defaultCountryId
+    let defaultCountryId = settings?.defaultCountryId
     
     console.log('[BG] User ID:', userId)
     console.log('[BG] Default country ID:', defaultCountryId)
     
-    if (!defaultCountryId) {
-      console.error('[BG] Default country not set!')
-      throw new Error('Default country not set. Please configure in settings.')
+    // 🔧 NEW: Auto-select first country if no default is set
+    let finalCountryId = defaultCountryId
+    if (!finalCountryId) {
+      console.log('[BG] No default country, auto-selecting first available...')
+      const countries = await api.getCountries()
+      if (countries.length === 0) {
+        throw new Error('No countries available. Please contact support.')
+      }
+      finalCountryId = countries[0].id
+      console.log('[BG] Auto-selected:', countries[0].name, countries[0].emoji)
     }
-    
-    // Use default country (respect user's choice)
-    const finalCountryId = defaultCountryId
     
     // Get country info for toast message
     console.log('[BG] Fetching countries...')
@@ -223,9 +237,18 @@ async function showToast(tabId: number, message: string) {
 // Listen for settings updates to refresh context menu
 chrome.runtime.onMessage.addListener((message) => {
   if (message.type === 'SETTINGS_UPDATED') {
+    console.log('[BG] Settings updated, refreshing context menu')
     updateContextMenus()
   }
   return true
+})
+
+// Listen for storage changes to refresh context menu
+chrome.storage.onChanged.addListener((changes, areaName) => {
+  if (areaName === 'local' && changes.settings) {
+    console.log('[BG] Settings changed in storage, refreshing menu')
+    updateContextMenus()
+  }
 })
 
 // Keep service worker alive

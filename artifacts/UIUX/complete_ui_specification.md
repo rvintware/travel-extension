@@ -906,3 +906,489 @@ Tips:       Wrap naturally
 
 Ready for future modifications and maintaining consistency! 🎨
 
+---
+
+## Create Trip View (Full-Screen) - Phase 0.4
+
+### Overview
+Full-screen view for creating trips, replacing the previous modal. Consistent with other detail views (Country Detail, Trip Detail, Settings).
+
+### Layout
+
+```
+┌─────────────────────────────────────┐
+│ ← Back                        🔄    │
+│ Create Trip                         │
+├─────────────────────────────────────┤
+│                                     │
+│ Trip Name *                         │
+│ ┌─────────────────────────────────┐ │
+│ │ 🌏 Southeast Asia 2025_________ │ │
+│ └─────────────────────────────────┘ │
+│ Emoji allowed! (e.g., 🗾 🌏 ✈️)     │
+│                                     │
+│ Countries (optional)                │
+│ Select countries to include         │
+│ ┌─────────────────────────────────┐ │
+│ │ ☐ 🇯🇵 Japan                     │ │
+│ │ ☑ 🇹🇭 Thailand                  │ │
+│ │ ☐ 🇸🇬 Singapore                 │ │
+│ │   (scrollable if many)           │ │
+│ └─────────────────────────────────┘ │
+│                                     │
+│ Duration (optional)                 │
+│ ┌────┐ days                        │
+│ │ 14 │                             │
+│ └────┘                              │
+│                                     │
+│ ☑ Set as active trip                │
+│   Quick-saves will go to this trip  │
+│                                     │
+├─────────────────────────────────────┤
+│  [  Cancel  ]  [ Create Trip ]      │
+└─────────────────────────────────────┘
+```
+
+### Header Specs
+
+```
+Background: white
+Border: 1px solid gray-200
+Padding: 16px (p-4)
+Flex: items-center justify-between
+
+Back button:
+├─ Font: text-base, font-medium
+├─ Color: primary → primary-dark (hover)
+├─ Gap: 8px between arrow and text
+└─ Transition: colors 150ms
+
+Refresh button:
+├─ Font: text-xl (20px emoji)
+├─ Color: gray-600 → primary (hover)
+├─ Animation: spin when refreshing
+└─ Title attribute for tooltip
+
+Title:
+├─ Font: text-lg (18px), font-semibold
+├─ Color: gray-900
+└─ Margin top: 8px
+```
+
+### Form Fields
+
+**Trip Name (Required)**
+```
+Label: text-sm (14px), font-semibold, gray-900
+Input:
+├─ Width: 100%
+├─ Padding: 12px (px-3 py-2)
+├─ Border: 1px solid gray-300
+├─ Radius: 8px (rounded-lg)
+├─ Focus: ring-2 ring-primary
+├─ Font: text-base (16px)
+└─ Placeholder: "e.g., 🌏 Southeast Asia 2025"
+
+Helper text:
+├─ Font: text-xs (12px)
+├─ Color: gray-500
+├─ Margin top: 4px
+└─ Content: "Emoji allowed! (e.g., 🗾 🌏 ✈️)"
+```
+
+**Countries (Optional Multi-Select)**
+```
+Label: text-sm, font-semibold, gray-900
+
+Empty state (no locations saved):
+┌───────────────────────────────────┐
+│         📍                        │
+│ No locations saved yet            │
+│ Save some locations first,        │
+│ then they'll appear here!         │
+└───────────────────────────────────┘
+├─ Background: gray-50
+├─ Border: 1px solid gray-200
+├─ Padding: 24px vertical, 16px horizontal
+├─ Radius: 8px
+├─ Icon: text-3xl (30px)
+└─ Text: text-sm and text-xs
+
+Countries list:
+├─ Border: 1px solid gray-300
+├─ Radius: 8px
+├─ Padding: 8px (p-2)
+├─ Max height: 240px (max-h-60)
+├─ Overflow: scroll
+└─ Background: white
+
+Each country item:
+├─ Padding: 12px horizontal, 8px vertical
+├─ Radius: 6px (rounded)
+├─ Cursor: pointer
+├─ Background: 
+│  ├─ Hover: gray-100
+│  └─ Selected: primary-light
+├─ Checkbox: 
+│  ├─ Color: primary
+│  └─ Focus: ring-primary
+├─ Emoji: text-2xl (24px)
+└─ Label: text-sm, gray-700
+```
+
+**Duration (Optional)**
+```
+Label: text-sm, font-semibold, gray-900
+
+Input container:
+├─ Display: flex
+├─ Items: center
+├─ Gap: 8px
+
+Number input:
+├─ Width: 80px (w-20)
+├─ Padding: 12px (px-3 py-2)
+├─ Border: 1px solid gray-300
+├─ Radius: 8px
+├─ Focus: ring-2 ring-primary
+├─ Min: 1
+└─ Placeholder: "7"
+
+Days label:
+├─ Font: text-sm (14px)
+└─ Color: gray-600
+```
+
+**Set as Active (Checkbox)**
+```
+Checkbox container:
+├─ Display: flex items-center
+├─ Gap: 8px
+
+Checkbox:
+├─ Color: primary (checked)
+└─ Focus: ring-primary
+
+Label: text-sm, gray-700
+
+Helper text:
+├─ Font: text-xs (12px)
+├─ Color: gray-500
+├─ Margin left: 24px (to align with checkbox)
+└─ Content: "Quick-saves will go to this trip"
+```
+
+### Footer Action Buttons
+
+```
+Border top: 1px solid gray-200
+Padding: 16px (p-4)
+Display: flex
+Gap: 12px (gap-3)
+
+Cancel button (Secondary):
+├─ Flex: 1 (equal width)
+├─ Padding: 8px 16px
+├─ Background: white
+├─ Border: 1px solid gray-300
+├─ Color: gray-700
+├─ Hover: bg-gray-50
+└─ Disabled: opacity-50
+
+Create Trip button (Primary):
+├─ Flex: 1 (equal width)
+├─ Padding: 8px 16px
+├─ Background: primary
+├─ Color: white
+├─ Hover: bg-primary-dark, transform translateY(-1px)
+├─ Disabled: opacity-50, cursor-not-allowed
+├─ Active state: "Creating..." text
+└─ Shadow: 0 1px 3px rgba(0,0,0,0.1)
+```
+
+### Interactions
+
+**Refresh Button:**
+- Triggers: `loadAvailableCountries()`
+- Updates: Country list based on user's saved locations
+- State: Shows spinning animation during refresh
+- Keeps user on current screen
+
+**Country Selection:**
+- Single click toggles checkbox
+- Visual feedback: immediate background change
+- Multi-select: can select multiple countries
+- Empty array is valid (plan future trips)
+
+**Create Action:**
+- Validation: Name must not be empty (trim whitespace)
+- Countries: Optional (can be empty array)
+- Duration: Optional (can be blank)
+- Success: Navigate back to trip list, refresh data
+- Error: Show alert (TODO: Replace with toast)
+
+---
+
+## Refresh Button Specification - Phase 0.4
+
+### Universal Presence
+Refresh button (🔄) appears on **every** screen header except main list views (which have tabs with refresh).
+
+**Screens with refresh:**
+- Country Detail
+- Trip Detail
+- Settings
+- Create Trip View
+
+### Specs
+
+```
+Position: Top-right of header
+Icon: 🔄 emoji (text-xl, 20px)
+
+States:
+├─ Idle:
+│  ├─ Color: gray-600
+│  └─ Hover: primary
+├─ Refreshing:
+│  ├─ Animation: animate-spin
+│  └─ Disabled: true
+└─ Transition: colors 150ms
+
+Button:
+├─ Padding: 0 (icon only)
+├─ Background: transparent
+├─ Border: none
+├─ Cursor: pointer (idle), not-allowed (refreshing)
+└─ Title: "Refresh" (tooltip)
+```
+
+### Behavior
+
+**Country Detail:**
+```typescript
+async function handleRefresh() {
+  setRefreshing(true)
+  // Fetch all locations, filter to current country
+  // Stay on current screen
+  setRefreshing(false)
+}
+```
+
+**Trip Detail:**
+```typescript
+async function handleRefresh() {
+  setRefreshing(true)
+  // Fetch trip data and trip locations
+  // Stay on current screen, preserve day filter selection
+  setRefreshing(false)
+}
+```
+
+**Settings:**
+```typescript
+async function handleRefresh() {
+  setRefreshing(true)
+  // Reload settings from storage
+  // Reload location/trip counts
+  // Refresh available countries filter
+  setRefreshing(false)
+}
+```
+
+**Create Trip View:**
+```typescript
+async function handleRefresh() {
+  setRefreshing(true)
+  // Refresh available countries based on locations
+  // Stay on form, preserve entered data
+  setRefreshing(false)
+}
+```
+
+### Animation
+
+```css
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+Duration: 1 second (continuous while refreshing)
+Timing: linear
+```
+
+---
+
+## Multi-Country Trip Support - Phase 0.4
+
+### Trip Card Updates
+
+**Previous (Single Country):**
+```
+┌───────────────────────────────────┐
+│ 🇯🇵 Tokyo 2025                12  │
+│ Active · 7 days · 15 locations    │
+└───────────────────────────────────┘
+```
+
+**New (Multi-Country):**
+```
+┌───────────────────────────────────┐
+│ Asia 2026                     12  │
+│ Active · 3 countries · 7 days     │
+└───────────────────────────────────┘
+```
+
+**Changes:**
+- Removed: Country emoji prefix from name
+- Added: "X countries" indicator
+- Logic: Countries come from `trip_countries` join table
+- Display: Shows count, not individual flags (cleaner)
+
+### Database Schema
+
+```sql
+-- New table for many-to-many relationship
+trip_countries:
+  id              uuid primary key
+  trip_id         uuid references trips(id) ON DELETE CASCADE
+  country_id      uuid references countries(id) ON DELETE CASCADE
+  display_order   integer
+  created_at      timestamp
+
+-- Updated trips table
+trips.country_id:
+  NOW: nullable (can be null for multi-country trips)
+  BEFORE: required (1-to-1 relationship)
+```
+
+### Creation Flow
+
+**User creates trip:**
+1. Enters trip name (required)
+2. Selects 0-N countries (optional, filtered by user's locations)
+3. Enters duration (optional)
+4. Sets as active (optional, default true)
+
+**Backend creates:**
+1. Trip record with `country_id = null` (if multi-country)
+2. Multiple records in `trip_countries` (one per selected country)
+
+**Auto-country detection:**
+- When location added to trip, check if location's country exists in `trip_countries`
+- If not, automatically add country to trip
+- Keeps trip countries in sync with locations
+
+### Country Filtering
+
+**Settings - Default Country:**
+- Shows only countries with saved locations
+- Empty state: "Save some locations first"
+- Prevents selecting countries with no content
+
+**Create Trip - Countries:**
+- Shows only countries with saved locations
+- Empty state: "No locations saved yet"
+- Allows creating trip without countries (plan ahead)
+
+---
+
+## Updated Component Specs
+
+### Trip Card Component
+
+```typescript
+interface Trip {
+  id: string
+  name: string
+  is_active: boolean
+  duration_days?: number
+  location_count: number
+  countries?: Country[]  // NEW: Array from trip_countries join
+}
+
+Display:
+├─ Name: No emoji prefix
+├─ Status: "Active" if is_active
+├─ Countries: `${countries.length} countries` or `${countries[0].emoji} ${countries[0].name}`
+├─ Days: If duration_days set
+└─ Locations: `${location_count} locations`
+```
+
+### Settings Component
+
+```typescript
+Available Countries Logic:
+1. Fetch all user locations
+2. Extract unique country_ids
+3. Filter countries array to only those with locations
+4. Show in dropdown
+
+Empty state:
+├─ Dropdown: Disabled
+├─ Message: "Save some locations first to select a default country"
+└─ Prevents creating invalid settings
+```
+
+### Context Menu Dynamic Updates
+
+**Listens for:**
+- `SETTINGS_UPDATED` message from Settings save
+- `chrome.storage.onChanged` for settings changes
+- Trip set as active (implicit settings change)
+
+**Updates:**
+```typescript
+async function updateContextMenus() {
+  // Fetch current default trip ID from settings
+  // Fetch trip name from API
+  // Update menu: "⭐ Save to [Trip Name]"
+  // If no trip, hide menu item
+}
+```
+
+**Result:**
+- Menu always shows current active trip name
+- Updates immediately when trip changes
+- No stale menu items
+
+---
+
+## Implementation Summary - Phase 0.4
+
+### Files Created
+1. `extension/popup/CreateTripView.tsx` - Full-screen create trip
+
+### Files Modified
+1. `extension/background/index.ts` - Context menu listeners, dynamic trip name
+2. `extension/popup/CountryDetail.tsx` - Added refresh button
+3. `extension/popup/TripDetail.tsx` - Added refresh button  
+4. `extension/components/Settings.tsx` - Added refresh button, country filtering
+5. `extension/popup.tsx` - Wire CreateTripView, add 'createTrip' view type
+6. `extension/popup/TripsView.tsx` - Remove modal, call `onNewTrip()` directly
+7. `extension/lib/types.ts` - Add 'createTrip' to ViewType
+8. `backend/lib/ai/extract.ts` - Add `extractLocationVariations()` function
+9. `backend/lib/jobs/process-location.ts` - Multi-attempt Google Places with 3 variations
+
+### Features Added
+- ✅ Refresh button on all detail views
+- ✅ Full-screen Create Trip (not modal)
+- ✅ Multi-country trip support
+- ✅ Country filtering (only show countries with locations)
+- ✅ Context menu shows active trip name
+- ✅ Dynamic context menu updates
+- ✅ Robust location extraction (3 variations with fallback)
+- ✅ Partial text completion using screenshot context
+
+### UX Improvements
+- Consistent navigation (full-screen views throughout)
+- Always-available refresh (user can sync any time)
+- Smart country filtering (no empty options)
+- Reliable extraction (tries 3 times before giving up)
+
+---
+
+**Version:** 0.4 (October 13, 2025)
+**Status:** Updated with Phase 0.4 features
+

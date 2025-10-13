@@ -19,6 +19,13 @@ interface ExtractionResult {
   confidence: number
 }
 
+interface LocationVariation {
+  searchQuery: string
+  confidence: number
+  reasoning: string
+  specificityLevel: 'high' | 'medium' | 'low'
+}
+
 /**
  * Extract location from screenshot using GPT-4o with vision
  */
@@ -268,6 +275,120 @@ Output valid JSON only.`
   } catch (error) {
     console.error('[AI Multi] Failed:', error)
     return []
+  }
+}
+
+/**
+ * Extract location as 3 search query variations (high → low specificity)
+ * Uses screenshot to complete partial/vague text
+ */
+export async function extractLocationVariations(
+  screenshot: string,
+  selectedText: string,
+  url: string,
+  pageTitle: string
+): Promise<LocationVariation[]> {
+  console.log('[AI Variations] Extracting 3 search queries...')
+  console.log('[AI Variations] Selected text:', selectedText.substring(0, 100))
+  
+  try {
+    const response = await openai.chat.completions.create({
+      model: 'gpt-4o',
+      messages: [{
+        role: 'user',
+        content: [
+          {
+            type: 'text',
+            text: `⚠️ CRITICAL: Extract location and create 3 Google Places search queries.
+
+User highlighted: "${selectedText}"
+
+The screenshot shows the FULL CONTEXT. Use it to:
+- Complete partial words (e.g., "ryu" → screenshot shows "Ryugon")
+- Add missing details (neighborhood, city, region, country)
+- Understand vague references ("this place" → what place in screenshot?)
+
+Create 3 search query variations from MOST specific to LEAST specific:
+
+1. HIGH SPECIFICITY (confidence: 0.85-0.95)
+   - Full name + neighborhood + city + region + country
+   - Example: "Ryugon Traditional Inn, Minamiuonuma, Niigata, Japan"
+   - Use ALL context from screenshot
+
+2. MEDIUM SPECIFICITY (confidence: 0.70-0.85)
+   - Name + city/region + country
+   - Example: "Ryugon Inn Niigata Japan"
+   - Core details only
+
+3. LOW SPECIFICITY (confidence: 0.60-0.70)
+   - Just the name (use screenshot to complete if partial)
+   - Example: "Ryugon"
+   - Simplest query
+
+IMPORTANT RULES:
+- If highlighted text is PARTIAL (e.g., "ryu"), use screenshot to find FULL name
+- Always include country in high/medium specificity
+- Return 3 distinct queries (not duplicates)
+- Confidence decreases as specificity decreases
+
+Source: ${url}
+Page title: "${pageTitle}"
+
+Return as JSON:
+{
+  "variations": [
+    {
+      "searchQuery": "Full query for Google Places",
+      "confidence": 0.90,
+      "reasoning": "Why this query will work",
+      "specificityLevel": "high"
+    },
+    {
+      "searchQuery": "Medium query",
+      "confidence": 0.75,
+      "reasoning": "Fallback if high fails",
+      "specificityLevel": "medium"
+    },
+    {
+      "searchQuery": "Simple query",
+      "confidence": 0.65,
+      "reasoning": "Last resort",
+      "specificityLevel": "low"
+    }
+  ]
+}
+
+Output valid JSON only.`
+          },
+          {
+            type: 'image_url',
+            image_url: { url: screenshot }
+          }
+        ]
+      }],
+      response_format: { type: 'json_object' },
+      max_tokens: 800,
+      temperature: 0.3
+    })
+    
+    const result = JSON.parse(response.choices[0].message.content || '{}')
+    const variations = result.variations || []
+    
+    console.log('[AI Variations] Generated:', variations.length, 'queries')
+    variations.forEach((v: LocationVariation, i: number) => {
+      console.log(`  ${i+1}. "${v.searchQuery}" (${v.confidence})`)
+    })
+    
+    return variations
+  } catch (error) {
+    console.error('[AI Variations] Failed:', error)
+    // Fallback: return basic query from selected text
+    return [{
+      searchQuery: selectedText.trim(),
+      confidence: 0.5,
+      reasoning: 'AI extraction failed, using raw text',
+      specificityLevel: 'low'
+    }]
   }
 }
 

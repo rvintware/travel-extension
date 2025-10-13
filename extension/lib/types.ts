@@ -126,7 +126,7 @@ export interface ToastMessage extends Message {
 // UI STATE TYPES
 // ============================================================================
 
-export type ViewType = 'tripList' | 'tripDetail' | 'locationList' | 'countryDetail' | 'settings'
+export type ViewType = 'tripList' | 'tripDetail' | 'createTrip' | 'locationList' | 'countryDetail' | 'settings'
 
 export interface NavigationState {
   view: ViewType;

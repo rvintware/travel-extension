@@ -17,6 +17,7 @@ export function Settings({ countries, trips, onBack, onSave }: SettingsProps) {
   const [settings, setSettings] = useState<SettingsType | null>(null)
   const [popupBehavior, setPopupBehavior] = useState<'trips' | 'locations' | 'remember'>('trips')
   const [loading, setLoading] = useState(true)
+  const [refreshing, setRefreshing] = useState(false)
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
   const [isDeleting, setIsDeleting] = useState(false)
   const [locationCount, setLocationCount] = useState(0)
@@ -75,6 +76,16 @@ export function Settings({ countries, trips, onBack, onSave }: SettingsProps) {
     }
   }
   
+  async function handleRefresh() {
+    setRefreshing(true)
+    try {
+      await loadSettings()
+      await loadCounts()
+    } finally {
+      setRefreshing(false)
+    }
+  }
+  
   async function handleSave() {
     if (!settings) return
     
@@ -126,13 +137,24 @@ export function Settings({ countries, trips, onBack, onSave }: SettingsProps) {
     <div className="flex flex-col h-full">
       {/* Header */}
       <div className="bg-white border-b border-gray-200 p-4 flex-shrink-0">
-        <button
-          onClick={onBack}
-          className="flex items-center gap-2 text-primary hover:text-primary-dark transition-colors mb-2"
-        >
-          <span>←</span>
-          <span className="font-medium">Back</span>
-        </button>
+        <div className="flex items-center justify-between mb-2">
+          <button
+            onClick={onBack}
+            className="flex items-center gap-2 text-primary hover:text-primary-dark transition-colors"
+          >
+            <span>←</span>
+            <span className="font-medium">Back</span>
+          </button>
+          
+          <button 
+            onClick={handleRefresh}
+            className="text-gray-600 hover:text-primary transition-colors"
+            disabled={refreshing}
+            title="Refresh"
+          >
+            <span className={refreshing ? 'animate-spin' : ''}>🔄</span>
+          </button>
+        </div>
         <h1 className="text-lg font-semibold text-gray-900">⚙️ Settings</h1>
       </div>
       

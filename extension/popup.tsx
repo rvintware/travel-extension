@@ -4,6 +4,7 @@ import { TripsView } from "./popup/TripsView"
 import { LocationsView } from "./popup/LocationsView"
 import { CountryDetail } from "./popup/CountryDetail"
 import { TripDetail } from "./popup/TripDetail"
+import { CreateTripView } from "./popup/CreateTripView"
 import { Settings } from "./components/Settings"
 import { AddToTripModal } from "./components/AddToTripModal"
 import type { Country, Trip, Location, ViewType } from "./lib/types"
@@ -178,8 +179,7 @@ function IndexPopup() {
   }
   
   function handleNewTrip() {
-    // Reload trips after creation
-    loadDataWithCache()
+    setView('createTrip')
   }
   
   function handleAddToTrip(location: Location) {
@@ -190,11 +190,11 @@ function IndexPopup() {
   function handleAddToTripSuccess() {
     setShowAddToTripModal(false)
     setLocationToAdd(null)
-    loadData() // Refresh data
+    loadDataWithCache() // Refresh data
   }
   
   function handleDeleteLocation(location: Location) {
-    loadData() // Refresh data
+    loadDataWithCache() // Refresh data
   }
   
   // Count locations by country
@@ -212,6 +212,19 @@ function IndexPopup() {
           trips={trips}
           onBack={handleBackFromSettings}
           onSave={handleBackFromSettings}
+        />
+      )
+    }
+    
+    if (view === 'createTrip') {
+      return (
+        <CreateTripView
+          countries={countries}
+          onBack={() => setView('tripList')}
+          onSuccess={(trip) => {
+            setView('tripList')
+            loadDataWithCache() // Refresh
+          }}
         />
       )
     }

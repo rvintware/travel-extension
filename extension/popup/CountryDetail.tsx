@@ -17,6 +17,7 @@ interface CountryDetailProps {
 export function CountryDetail({ country, onBack, onAddToTrip, onDelete }: CountryDetailProps) {
   const [locations, setLocations] = useState<Location[]>([])
   const [loading, setLoading] = useState(true)
+  const [refreshing, setRefreshing] = useState(false)
   const [confirmDialog, setConfirmDialog] = useState<{
     isOpen: boolean
     location: Location | null
@@ -51,6 +52,19 @@ export function CountryDetail({ country, onBack, onAddToTrip, onDelete }: Countr
       console.error('Failed to load locations:', error)
     } finally {
       setLoading(false)
+    }
+  }
+  
+  async function handleRefresh() {
+    setRefreshing(true)
+    try {
+      const userId = await getUserId()
+      const locations = await api.getLocations(userId)
+      // Filter to current country
+      const filtered = locations.filter(l => l.country_id === country.id)
+      setLocations(filtered)
+    } finally {
+      setRefreshing(false)
     }
   }
   
@@ -96,13 +110,24 @@ export function CountryDetail({ country, onBack, onAddToTrip, onDelete }: Countr
     <div className="flex flex-col h-full">
       {/* Header */}
       <div className="bg-white border-b border-gray-200 p-4 flex-shrink-0">
-        <button
-          onClick={onBack}
-          className="flex items-center gap-2 text-primary hover:text-primary-dark transition-colors mb-2"
-        >
-          <span>←</span>
-          <span className="font-medium">Back</span>
-        </button>
+        <div className="flex items-center justify-between mb-2">
+          <button
+            onClick={onBack}
+            className="flex items-center gap-2 text-primary hover:text-primary-dark transition-colors"
+          >
+            <span>←</span>
+            <span className="font-medium">Back</span>
+          </button>
+          
+          <button 
+            onClick={handleRefresh}
+            className="text-gray-600 hover:text-primary transition-colors"
+            disabled={refreshing}
+            title="Refresh"
+          >
+            <span className={refreshing ? 'animate-spin' : ''}>🔄</span>
+          </button>
+        </div>
         <div className="flex items-center gap-2">
           <span className="text-2xl">{country.emoji || '🌐'}</span>
           <div>
