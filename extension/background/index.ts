@@ -127,7 +127,8 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
     let screenshot = null
     try {
       screenshot = await chrome.tabs.captureVisibleTab(tab.windowId, {
-        format: 'png'
+        format: 'jpeg',  // JPEG for smaller file size
+        quality: 70      // Good for OCR, 5x smaller than PNG
       })
       console.log('[BG] ✅ Screenshot captured, size:', screenshot.length, 'chars')
     } catch (error) {
@@ -146,6 +147,9 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
       sourceUrl: tab.url || '',
       pageTitle: tab.title || 'Untitled',
       screenshot: screenshot, // Phase 0.3: Screenshot for AI vision
+      tripId: info.menuItemId === MENU_ID_TRIP && settings?.defaultTripId 
+        ? settings.defaultTripId 
+        : undefined // Phase 0.3: For multi-location trip linking
     })
     
     console.log('[BG] ✅ Location created:', location.id)

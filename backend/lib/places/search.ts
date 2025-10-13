@@ -75,17 +75,14 @@ export async function searchGooglePlaces(
       return null
     }
     
-    // Format photo URLs
+    // Format photo URL - just one thumbnail
     const photos: string[] = []
     if (place.photos && place.photos.length > 0) {
-      // Take up to 3 photos
-      for (let i = 0; i < Math.min(3, place.photos.length); i++) {
-        const photo = place.photos[i]
-        if (photo.photo_reference) {
-          photos.push(
-            `https://maps.googleapis.com/maps/api/place/photo?maxwidth=800&photo_reference=${photo.photo_reference}&key=${process.env.GOOGLE_PLACES_API_KEY}`
-          )
-        }
+      const photo = place.photos[0]  // Just first photo
+      if (photo.photo_reference) {
+        photos.push(
+          `https://maps.googleapis.com/maps/api/place/photo?maxwidth=400&photo_reference=${photo.photo_reference}&key=${process.env.GOOGLE_PLACES_API_KEY}`
+        )
       }
     }
     

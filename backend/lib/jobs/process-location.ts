@@ -1,28 +1,39 @@
 import { inngest } from '../inngest'
 import { supabase } from '../supabase'
-import { extractFromScreenshot } from '../ai/extract'
+import { extractFromScreenshot, countLocations, extractMultipleLocations } from '../ai/extract'
 import { searchGooglePlaces } from '../places/search'
 
 /**
- * Inngest function to process a location with AI and Google Places
+ * Inngest function to process location(s) with AI and Google Places
  * 
  * Pipeline:
- * 1. AI extraction from rich context
- * 2. Google Places lookup for enrichment
- * 3. Update database with structured data
+ * 1. Count locations in highlighted text
+ * 2. If 1: Update placeholder with enriched data
+ * 3. If >1: Extract all, create separate entries, delete placeholder
  */
 export const processLocation = inngest.createFunction(
   { 
     id: 'process-location',
-    retries: 3 // Retry up to 3 times on failure
+    retries: 3
   },
   { event: 'location/created' },
+  
   async ({ event, step }) => {
-    const { locationId, screenshot, selectedText, url, pageTitle } = event.data
+    const { 
+      locationId,      // Placeholder location ID
+      screenshot, 
+      selectedText, 
+      url, 
+      pageTitle,
+      userId,          // For creating multiple locations
+      countryId,       // For creating multiple locations
+      tripId           // Optional: for linking to trip
+    } = event.data
     
-    console.log(`[Job] Processing location ${locationId} with screenshot`)
+    console.log(`[Job] Processing location ${locationId}`)
+    console.log(`[Job] Has tripId:`, !!tripId)
     
-    // Update status to processing
+    // Mark placeholder as processing
     await step.run('mark-processing', async () => {
       await supabase
         .from('locations')
@@ -30,46 +41,39 @@ export const processLocation = inngest.createFunction(
         .eq('id', locationId)
     })
     
-    // STEP 1: AI Extraction from Screenshot (Vision)
-    const extracted = await step.run('extract-with-vision', async () => {
-      try {
-        if (!screenshot) {
-          throw new Error('No screenshot provided')
-        }
-        return await extractFromScreenshot(screenshot, selectedText, url, pageTitle)
-      } catch (error) {
-        console.error('[Job] Vision extraction failed:', error)
-        throw error
-      }
+    // STEP 1: Count how many locations
+    const count = await step.run('count-locations', async () => {
+      return await countLocations(screenshot, selectedText)
     })
     
-    console.log(`[Job] Extracted: ${extracted.location_name} (confidence: ${extracted.confidence})`)
+    console.log(`[Job] Count: ${count} locations`)
     
-    // STEP 2: Google Places Lookup (if confidence is high enough)
-    const place = await step.run('google-places-lookup', async () => {
-      if (extracted.confidence < 0.5) {
-        console.log('[Job] Skipping Places lookup - confidence too low')
-        return null
-      }
-      
-      try {
-        const searchQuery = extracted.address || extracted.neighborhood
-        return await searchGooglePlaces(extracted.location_name, searchQuery)
-      } catch (error) {
-        console.error('[Job] Google Places lookup failed:', error)
-        return null // Continue without Places data
-      }
-    })
-    
-    if (place) {
-      console.log(`[Job] Found on Google Places: ${place.name}`)
-    } else {
-      console.log('[Job] Not found on Google Places, using AI data')
+    if (count === 0) {
+      // No locations found
+      await supabase
+        .from('locations')
+        .update({ 
+          processing_status: 'error',
+          error_message: 'No locations detected in highlighted text'
+        })
+        .eq('id', locationId)
+      return { success: false, reason: 'No locations found' }
     }
     
-    // STEP 3: Update location with enriched data
-    await step.run('update-database', async () => {
-      try {
+    if (count === 1) {
+      // ==================== SINGLE LOCATION FLOW ====================
+      console.log('[Job] Single location - updating placeholder')
+      
+      const extracted = await step.run('extract-single', async () => {
+        return await extractFromScreenshot(screenshot, selectedText, url, pageTitle)
+      })
+      
+      const place = await step.run('google-places-single', async () => {
+        if (extracted.confidence < 0.5) return null
+        return await searchGooglePlaces(extracted.location_name)
+      })
+      
+      const updated = await step.run('update-placeholder', async () => {
         const updateData: any = {
           name: place?.name || extracted.location_name,
           address: place?.address || extracted.address || extracted.neighborhood,
@@ -87,44 +91,113 @@ export const processLocation = inngest.createFunction(
           processed_at: new Date().toISOString()
         }
         
-        // Add Google-specific data if available
         if (place?.rating) {
-          updateData.user_rating = Math.round(place.rating) // Store as 1-5
+          updateData.user_rating = Math.round(place.rating)
         }
         if (place?.priceLevel) {
           updateData.price_level = place.priceLevel
         }
         
-        const { error } = await supabase
+        // @ts-ignore
+        const { data, error } = await supabase
           .from('locations')
           .update(updateData)
           .eq('id', locationId)
+          .select()
         
         if (error) throw error
         
-        console.log(`[Job] Successfully updated location ${locationId}`)
-      } catch (error) {
-        console.error('[Job] Database update failed:', error)
-        
-        // Mark as error
-        await supabase
-          .from('locations')
-          .update({ 
-            processing_status: 'error',
-            error_message: error instanceof Error ? error.message : 'Unknown error'
-          })
-          .eq('id', locationId)
-        
-        throw error
+        return data?.[0]
+      })
+      
+      return { 
+        success: true, 
+        count: 1,
+        locationId,
+        name: updated?.name
       }
-    })
-    
-    return { 
-      success: true, 
-      locationId,
-      verified: !!place,
-      confidence: extracted.confidence
+      
+    } else {
+      // ==================== MULTIPLE LOCATIONS FLOW ====================
+      console.log('[Job] Multiple locations - creating separate entries')
+      
+      const locations = await step.run('extract-multiple', async () => {
+        return await extractMultipleLocations(screenshot, selectedText, url)
+      })
+      
+      const created = await step.run('create-all-locations', async () => {
+        const results = []
+        
+        for (const loc of locations) {
+          console.log(`[Job] Processing: ${loc.location_name}`)
+          
+          // Google Places validation
+          const place = await searchGooglePlaces(loc.location_name)
+          console.log(`[Job] Google found:`, !!place)
+          
+          // Create new location (verified if Google found it)
+          const { data: newLoc } = await supabase
+            .from('locations')
+            .insert({
+              user_id: userId,
+              country_id: countryId,
+              name: place?.name || loc.location_name,
+              address: place?.address || loc.address,
+              lat: place?.lat,
+              lng: place?.lng,
+              category: loc.category,
+              subcategory: loc.subcategory,
+              summary: loc.summary || `Location from travel plan`,
+              tips: loc.tips || [],
+              photos: place?.photos || [],
+              place_id: place?.place_id,
+              location_verified: !!place,
+              confidence_score: loc.confidence || 0.7,
+              user_rating: place?.rating ? Math.round(place.rating) : null,
+              price_level: place?.priceLevel,
+              original_text: selectedText,
+              source_url: url,
+              page_title: pageTitle,
+              source_type: 'single_save',
+              processing_status: 'complete',
+              is_from_itinerary: false,
+              processed_at: new Date().toISOString()
+            })
+            .select()
+            .single()
+          
+          if (newLoc) {
+            // Link to trip if provided
+            if (tripId) {
+              await supabase.from('trip_locations').insert({
+                trip_id: tripId,
+                location_id: newLoc.id,
+                display_order: results.length  // Order by extraction
+              })
+            }
+            
+            results.push(newLoc)
+          }
+        }
+        
+        return results
+      })
+      
+      // Delete the placeholder location
+      await step.run('cleanup-placeholder', async () => {
+        await supabase.from('locations').delete().eq('id', locationId)
+        return { deleted: locationId, created: created.length }
+      })
+      
+      return { 
+        success: true,
+        count: created.length, 
+        locations: created.map(l => ({
+          id: l.id,
+          name: l.name,
+          verified: l.location_verified
+        }))
+      }
     }
   }
 )
-

@@ -62,6 +62,7 @@ export async function POST(request: Request) {
       console.log('[API] Event name: location/created')
       console.log('[API] Location ID:', data.id)
       console.log('[API] Screenshot size:', body.screenshot.length, 'chars')
+      console.log('[API] Trip ID:', body.tripId || 'none')
       
       try {
         await inngest.send({
@@ -71,7 +72,10 @@ export async function POST(request: Request) {
             screenshot: body.screenshot,
             selectedText: validated.originalText,
             url: validated.sourceUrl,
-            pageTitle: validated.pageTitle || 'Untitled'
+            pageTitle: validated.pageTitle || 'Untitled',
+            userId: validated.userId,      // For creating multiple locations
+            countryId: validated.countryId, // For creating multiple locations
+            tripId: body.tripId || null     // For linking multiple to trip
           }
         })
         console.log('[API] ✅ Inngest event sent successfully!')

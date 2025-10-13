@@ -45,6 +45,7 @@ export async function saveLocation(data: {
   pageTitle?: string
   category?: string
   screenshot?: string  // Phase 0.3: Screenshot for AI vision processing
+  tripId?: string      // Phase 0.3: For linking multiple locations to trip
 }) {
   console.log('[API Client] Saving location...')
   console.log('[API Client] URL:', `${API_URL}/api/locations`)

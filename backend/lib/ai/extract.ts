@@ -40,30 +40,45 @@ export async function extractFromScreenshot(
         content: [
           { 
             type: 'text', 
-            text: `Extract travel location information from this screenshot.
+            text: `⚠️ CRITICAL INSTRUCTION:
+Extract location from the HIGHLIGHTED TEXT ONLY.
+The screenshot is for CONTEXT - it helps you understand vague references.
+DO NOT extract locations from other visible text in the screenshot.
 
-The user highlighted this text: "${selectedText}"
+User highlighted: "${selectedText}"
 
-Source:
-- URL: ${url}
-- Page Title: "${pageTitle}"
+Source: ${url}
+Page title: "${pageTitle}"
 
-Look at the screenshot to understand the full context around the highlighted text.
-Extract the location information as JSON:
+The screenshot shows the page where this text appears.
+Use it to understand what vague terms mean:
+- "this place" → screenshot shows which place they mean
+- "the temple" → screenshot helps identify which temple
+- "Disney Sea" → screenshot confirms context
 
+But EXTRACT ONLY from the highlighted text above.
+Do not extract from comments, replies, or other text visible in screenshot.
+
+Look for SPECIFIC LOCATIONS in the highlighted text:
+✅ Restaurants, cafes, bars
+✅ Temples, shrines, museums
+✅ Hotels, shops, landmarks
+✅ Cities, towns (if mentioned in highlighted text)
+✅ Parks, gardens, attractions
+
+Extract as JSON:
 {
-  "location_name": "Official name or descriptive identifier",
-  "address": "Full address or neighborhood",
-  "neighborhood": "Area/district",
-  "category": "One of: restaurant, cafe, bar, temple, shrine, museum, park, hotel, shop, sight, activity",
-  "subcategory": "More specific type",
-  "summary": "1-2 sentence compelling description",
-  "tips": ["Array of 3-5 actionable tips from the visible text"],
+  "location_name": "Name from highlighted text",
+  "address": "If mentioned in highlighted text",
+  "neighborhood": "If mentioned",
+  "category": "restaurant/temple/city/etc",
+  "subcategory": "More specific",
+  "summary": "1-2 sentence description",
+  "tips": ["Tips from highlighted text only"],
   "confidence": 0.85
 }
 
-Use the visual context from the screenshot to understand what location the user is referring to.
-Extract tips as direct quotes when possible.
+Remember: Screenshot = context, Highlighted text = source
 
 Output valid JSON only.`
           },
@@ -94,146 +109,146 @@ Output valid JSON only.`
 }
 
 /**
- * Extract location information from rich context using AI
+ * Count distinct locations in highlighted text
  */
-export async function extractLocationWithAI(context: any): Promise<ExtractionResult> {
-  const platform = context?.metadata?.platform || 'generic'
-  const systemPrompt = buildSystemPrompt(platform)
-  const userMessage = buildUserMessage(context)
-  
-  console.log(`[AI Extract] Platform: ${platform}, Message length: ${userMessage.length} chars`)
+export async function countLocations(
+  screenshot: string,
+  selectedText: string
+): Promise<number> {
+  console.log('[AI Count] Counting locations...')
   
   try {
     const response = await openai.chat.completions.create({
-      model: 'gpt-4o-mini',
-      messages: [
-        { role: 'system', content: systemPrompt },
-        { role: 'user', content: userMessage }
-      ],
-      response_format: { type: 'json_object' },
-      temperature: 0.3, // Lower = more deterministic
-      max_tokens: 500,
+      model: 'gpt-4o',
+      messages: [{
+        role: 'user',
+        content: [
+          {
+            type: 'text',
+            text: `⚠️ IMPORTANT: 
+- The screenshot is for VISUAL CONTEXT ONLY
+- COUNT locations mentioned in the HIGHLIGHTED TEXT ONLY
+- DO NOT count locations from other parts of the screenshot
+
+User highlighted this text: "${selectedText}"
+
+Count how many DISTINCT locations are mentioned in THIS HIGHLIGHTED TEXT.
+
+The screenshot helps you see the page layout and understand context,
+but you should ONLY count locations that appear in the highlighted text above.
+
+A location can be:
+✅ Cities (Tokyo, Kyoto)
+✅ Specific places (Disney Sea, Senso-ji Temple)
+✅ Landmarks, restaurants, hotels, temples, etc.
+
+Examples:
+- Highlighted text: "Disney Sea seems well-regarded" → 1 (Disney Sea)
+- Highlighted text: "Tokyo, Kyoto, Osaka" → 3
+- Highlighted text: "this place is amazing" → 1 (use screenshot to identify "this place")
+
+Screenshot may show many other locations → IGNORE THEM
+Count from: Highlighted text ONLY
+
+Return ONLY a number.`
+          },
+          {
+            type: 'image_url',
+            image_url: { url: screenshot }
+          }
+        ]
+      }],
+      max_tokens: 10
     })
     
-    const content = response.choices[0].message.content
-    if (!content) {
-      throw new Error('No content in AI response')
-    }
-    
-    const result = JSON.parse(content) as ExtractionResult
-    
-    console.log(`[AI Extract] Success: ${result.location_name}, confidence: ${result.confidence}`)
-    
-    return result
+    const count = parseInt(response.choices[0].message.content || '0')
+    console.log('[AI Count] Result:', count)
+    return count
   } catch (error) {
-    console.error('[AI Extract] Failed:', error)
-    throw error
+    console.error('[AI Count] Failed:', error)
+    return 1
   }
 }
 
 /**
- * Build system prompt based on platform
+ * Extract multiple locations as array
  */
-function buildSystemPrompt(platform: string): string {
-  if (platform === 'reddit') {
-    return `You are a travel location extractor specialized in Reddit threads.
-
-Reddit users often use vague references like "this place", "that shop", or "the one near X" without naming the location explicitly. Use the comment thread context to infer the actual location.
-
-Extract the following information as JSON:
-{
-  "location_name": "Official name or descriptive identifier (e.g., 'Ramen shop near Shibuya station' if exact name unknown)",
-  "address": "Full address if mentioned, or neighborhood/area",
-  "neighborhood": "District or area (e.g., 'Shibuya', 'Asakusa')",
-  "category": "One of: restaurant, cafe, bar, temple, shrine, museum, park, hotel, shop, sight, activity",
-  "subcategory": "More specific (e.g., 'ramen', 'italian', 'buddhist_temple')",
-  "summary": "1-2 sentence description capturing key info",
-  "tips": ["Array of 3-5 actionable tips as direct quotes when possible"],
-  "confidence": 0.85
-}
-
-Confidence scoring:
-- 0.9-1.0: Exact name and address mentioned
-- 0.7-0.9: Name clear, address approximate  
-- 0.5-0.7: Name inferred from context, location approximate
-- 0.0-0.5: Very vague, hard to identify specific location
-
-If exact name isn't mentioned, create a descriptive name based on all available context.
-Extract tips as direct quotes from the text when possible to preserve the original voice.
-
-Output valid JSON only, no additional text.`
-  }
+export async function extractMultipleLocations(
+  screenshot: string,
+  selectedText: string,
+  url: string
+): Promise<ExtractionResult[]> {
+  console.log('[AI Multi] Extracting multiple locations...')
   
-  if (platform === 'blog' || platform === 'medium' || platform === 'article') {
-    return `You are a travel location extractor for blog posts and articles.
+  try {
+    const response = await openai.chat.completions.create({
+      model: 'gpt-4o',
+      messages: [{
+        role: 'user',
+        content: [
+          {
+            type: 'text',
+            text: `⚠️ CRITICAL: Extract from HIGHLIGHTED TEXT ONLY.
 
-Blog posts and articles usually have more structured information with proper names and details.
+The screenshot is VISUAL CONTEXT. Do not extract locations visible in the screenshot that aren't mentioned in the highlighted text.
 
-Extract the following information as JSON:
+User highlighted: "${selectedText}"
+
+Extract ALL locations mentioned in THIS TEXT.
+The screenshot helps you see the page, but extract ONLY from highlighted text.
+
+Example:
+- Highlighted: "Tokyo, Kyoto, Osaka"
+- Screenshot shows: 20 other cities/places in thread → IGNORE THEM!
+- Extract: ONLY Tokyo, Kyoto, Osaka
+
+What to extract (from highlighted text):
+✅ Cities, towns (Tokyo, Kyoto, Kamakura)
+✅ Neighborhoods (Shibuya, Asakusa)
+✅ Specific places (Disney Sea, Senso-ji Temple, Ichiran Ramen)
+✅ Landmarks (Tokyo Tower)
+✅ Hotels, restaurants, museums, parks
+
+What NOT to extract:
+❌ Day numbers ("Day 1")
+❌ Durations ("3 days")
+❌ Locations visible in screenshot but not in highlighted text
+
+Return as JSON:
 {
-  "location_name": "Official location name",
-  "address": "Full address if provided",
-  "neighborhood": "District or area",
-  "category": "One of: restaurant, cafe, bar, temple, shrine, museum, park, hotel, shop, sight, activity",
-  "subcategory": "More specific category",
-  "summary": "1-2 sentence compelling description",
-  "tips": ["Array of 3-5 actionable tips from the text"],
-  "confidence": 0.95
+  "locations": [
+    {
+      "location_name": "Exact name from highlighted text",
+      "category": "city/restaurant/temple/etc",
+      "address": "If in highlighted text",
+      "tips": ["From highlighted text only"],
+      "confidence": 0.7
+    }
+  ]
 }
 
-Use the article structure (headings, intro) to understand context.
-Extract tips as quotes when they provide actionable advice.
-Confidence should be high (0.8+) for well-written articles.
+Extract ONLY from: "${selectedText}" ← THIS TEXT ONLY
+Screenshot purpose: Visual context to understand ambiguous terms
 
 Output valid JSON only.`
+          },
+          {
+            type: 'image_url',
+            image_url: { url: screenshot }
+          }
+        ]
+      }],
+      response_format: { type: 'json_object' },
+      max_tokens: 1500
+    })
+    
+    const result = JSON.parse(response.choices[0].message.content)
+    const locations = result.locations || []
+    console.log('[AI Multi] Extracted', locations.length, 'locations')
+    return locations
+  } catch (error) {
+    console.error('[AI Multi] Failed:', error)
+    return []
   }
-  
-  // Generic/fallback prompt
-  return `You are a travel location extractor.
-
-Extract location information from the provided text and context.
-
-Extract as JSON:
-{
-  "location_name": "Location name or description",
-  "address": "Address or area if mentioned",
-  "neighborhood": "District or neighborhood",
-  "category": "One of: restaurant, cafe, bar, temple, shrine, museum, park, hotel, shop, sight, activity",
-  "subcategory": "Specific type",
-  "summary": "1-2 sentence description",
-  "tips": ["3-5 actionable tips"],
-  "confidence": 0.75
-}
-
-Be helpful even with incomplete information. Create descriptive names if exact name isn't provided.
-
-Output valid JSON only.`
-}
-
-/**
- * Build user message from rich context
- */
-function buildUserMessage(context: any): string {
-  let message = 'Extract location information:\n\n'
-  
-  // Simple context format (Phase 0.3 MVP)
-  message += `USER HIGHLIGHTED: "${context?.selectedText || ''}"\n\n`
-  
-  message += `Source:\n`
-  message += `- URL: ${context?.url || ''}\n`
-  message += `- Page Title: "${context?.pageTitle || ''}"\n`
-  message += `- Platform: ${context?.platform || 'generic'}\n\n`
-  
-  // Add hint based on URL
-  if (context?.platform === 'reddit') {
-    message += `This is from a Reddit discussion. Use the thread title and subreddit context to infer the location.\n`
-  } else if (context?.url?.includes('blog')) {
-    message += `This is from a blog post. The location might be mentioned in the article title.\n`
-  }
-  
-  message += `\nIf the exact location name isn't in the highlighted text, infer it from the page title and URL context.\n`
-  message += `Create a descriptive name if needed (e.g., "Ramen shop in Shibuya" if exact name unknown).\n`
-  
-  return message
 }
 

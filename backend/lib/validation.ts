@@ -10,6 +10,7 @@ export const createLocationSchema = z.object({
   pageTitle: z.string().optional(),
   category: z.string().optional(),
   screenshot: z.string().optional(), // Base64 screenshot for AI vision
+  tripId: z.string().uuid().optional(), // For linking multiple locations to trip
 })
 
 export const updateLocationSchema = z.object({
