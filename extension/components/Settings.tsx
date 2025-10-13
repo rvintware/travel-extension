@@ -1,7 +1,10 @@
 import React, { useState, useEffect } from 'react'
 import type { Country, Trip, Settings as SettingsType } from '../lib/types'
-import { getSettings, saveSettings } from '../lib/storage'
+import { getSettings, saveSettings, getUserId } from '../lib/storage'
+import { Cache } from '../lib/cache'
 import { Button } from './Button'
+import { ConfirmDialog } from './ConfirmDialog'
+import * as api from '../lib/api'
 
 interface SettingsProps {
   countries: Country[]
@@ -14,9 +17,14 @@ export function Settings({ countries, trips, onBack, onSave }: SettingsProps) {
   const [settings, setSettings] = useState<SettingsType | null>(null)
   const [popupBehavior, setPopupBehavior] = useState<'trips' | 'locations' | 'remember'>('trips')
   const [loading, setLoading] = useState(true)
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
+  const [isDeleting, setIsDeleting] = useState(false)
+  const [locationCount, setLocationCount] = useState(0)
+  const [tripCount, setTripCount] = useState(0)
   
   useEffect(() => {
     loadSettings()
+    loadCounts()
   }, [])
   
   async function loadSettings() {
@@ -42,6 +50,19 @@ export function Settings({ countries, trips, onBack, onSave }: SettingsProps) {
     setLoading(false)
   }
   
+  async function loadCounts() {
+    try {
+      const userId = await getUserId()
+      const [locations] = await Promise.all([
+        api.getLocations(userId)
+      ])
+      setLocationCount(locations.length)
+      setTripCount(trips.length)
+    } catch (error) {
+      console.error('Failed to load counts:', error)
+    }
+  }
+  
   async function handleSave() {
     if (!settings) return
     
@@ -58,6 +79,27 @@ export function Settings({ countries, trips, onBack, onSave }: SettingsProps) {
     chrome.runtime.sendMessage({ type: 'SETTINGS_UPDATED' })
     
     onSave()
+  }
+  
+  async function handleDeleteAll() {
+    setIsDeleting(true)
+    try {
+      const userId = await getUserId()
+      await api.deleteAllUserData(userId)
+      
+      // Clear local cache
+      await Cache.clearAll()
+      
+      // Close modal
+      setShowDeleteConfirm(false)
+      
+      // Reload popup
+      onSave()
+    } catch (error) {
+      console.error('Delete all failed:', error)
+      alert('Failed to delete data. Please try again.')
+      setIsDeleting(false)
+    }
   }
   
   if (loading || !settings) {
@@ -165,6 +207,35 @@ export function Settings({ countries, trips, onBack, onSave }: SettingsProps) {
             </label>
           </div>
         </div>
+        
+        {/* Danger Zone */}
+        <div className="border-t-2 border-red-200 mt-6 pt-6">
+          <div className="bg-red-50 p-4 rounded-lg border border-red-200">
+            <h3 className="text-base font-semibold text-red-900 mb-2 flex items-center gap-2">
+              ⚠️ Danger Zone
+            </h3>
+            
+            <div className="mb-3">
+              <div className="text-sm font-medium text-red-900 mb-1">
+                Delete All Data
+              </div>
+              <div className="text-xs text-red-700 space-y-1">
+                <div>This will permanently delete:</div>
+                <div>• All locations ({locationCount})</div>
+                <div>• All trips ({tripCount})</div>
+                <div className="font-semibold mt-2">Cannot be undone!</div>
+              </div>
+            </div>
+            
+            <Button
+              onClick={() => setShowDeleteConfirm(true)}
+              variant="danger"
+              className="w-full"
+            >
+              🗑️ Delete Everything
+            </Button>
+          </div>
+        </div>
       </div>
       
       {/* Footer */}
@@ -177,6 +248,17 @@ export function Settings({ countries, trips, onBack, onSave }: SettingsProps) {
           Save Settings
         </Button>
       </div>
+      
+      {/* Delete Confirmation Modal */}
+      <ConfirmDialog
+        isOpen={showDeleteConfirm}
+        title="⚠️ Delete Everything?"
+        message={`This will permanently delete ${locationCount} locations and ${tripCount} trips. This CANNOT be undone. Are you sure?`}
+        confirmText={isDeleting ? 'Deleting...' : 'Delete All'}
+        confirmVariant="danger"
+        onConfirm={handleDeleteAll}
+        onCancel={() => setShowDeleteConfirm(false)}
+      />
     </div>
   )
 }

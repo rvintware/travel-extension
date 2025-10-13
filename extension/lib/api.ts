@@ -261,6 +261,32 @@ export function extractNameFromText(text: string): string {
     : firstSentence.trim()
 }
 
+/**
+ * Delete all locations and trips for a user
+ * DANGEROUS: Cannot be undone!
+ */
+export async function deleteAllUserData(userId: string): Promise<boolean> {
+  console.log('[API Client] Deleting all user data...')
+  
+  try {
+    const response = await fetch(`${API_URL}/api/users/${userId}/data`, {
+      method: 'DELETE'
+    })
+    
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({ error: 'Unknown error' }))
+      console.error('[API Client] Delete error:', error)
+      throw new Error(error.error || `HTTP ${response.status}`)
+    }
+    
+    console.log('[API Client] ✅ All data deleted')
+    return true
+  } catch (error) {
+    console.error('[API Client] ❌ Delete failed:', error)
+    throw error
+  }
+}
+
 // Note: Country detection removed - we now always respect the user's default country setting
 // This ensures saves go to the country the user explicitly chose in settings
 
