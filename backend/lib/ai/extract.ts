@@ -1,4 +1,10 @@
 import OpenAI from 'openai'
+import {
+  buildGlobalContextPrompt,
+  buildCountLocationsPrompt,
+  buildExtractMultipleLocationsPrompt,
+  buildLocationVariationsPrompt
+} from './prompts'
 
 if (!process.env.OPENAI_API_KEY) {
   console.warn('OPENAI_API_KEY not set - AI extraction will fail')
@@ -24,6 +30,19 @@ interface LocationVariation {
   confidence: number
   reasoning: string
   specificityLevel: 'high' | 'medium' | 'low'
+}
+
+export interface GlobalContext {
+  city: string | null           // "Qingdao"
+  region: string | null          // "Shandong Province"
+  country: string                // "China"
+  countryCode: string            // "CN"
+  approximateCoordinates: {
+    lat: number                  // 36.067
+    lng: number                  // 120.383
+  } | null
+  confidence: number             // 0.0-1.0
+  reasoning: string              // Why AI thinks this is the context
 }
 
 /**
@@ -132,40 +151,7 @@ export async function countLocations(
         content: [
           {
             type: 'text',
-            text: `⚠️ IMPORTANT: 
-- The screenshot is for VISUAL CONTEXT ONLY
-- COUNT DISTINCT locations mentioned in the HIGHLIGHTED TEXT ONLY
-- DO NOT count locations from other parts of the screenshot
-- If same location mentioned multiple times, count it ONCE
-
-User highlighted this text: "${selectedText}"
-
-Count how many DISTINCT/UNIQUE locations are mentioned in THIS HIGHLIGHTED TEXT.
-
-IMPORTANT - Deduplication rules:
-- "Tokyo" mentioned 3 times → Count: 1
-- "Tokyo Tower" mentioned twice → Count: 1
-- "Tokyo" and "Tokyo Tower" → Count: 2 (different places)
-- "Senso-ji" and "Senso-ji Temple" → Count: 1 (same place)
-
-The screenshot helps you see the page layout and understand context,
-but you should ONLY count UNIQUE locations that appear in the highlighted text above.
-
-A location can be:
-✅ Cities (Tokyo, Kyoto)
-✅ Specific places (Disney Sea, Senso-ji Temple)
-✅ Landmarks, restaurants, hotels, temples, etc.
-
-Examples:
-- Highlighted text: "Disney Sea seems well-regarded" → 1 (Disney Sea)
-- Highlighted text: "Tokyo, Tokyo, Tokyo" → 1 (same place mentioned 3x)
-- Highlighted text: "Tokyo, Kyoto, Osaka" → 3 (distinct cities)
-- Highlighted text: "Tokyo and Tokyo Tower" → 2 (different places)
-
-Screenshot may show many other locations → IGNORE THEM
-Count UNIQUE locations from: Highlighted text ONLY
-
-Return ONLY a number.`
+            text: buildCountLocationsPrompt(selectedText)
           },
           {
             type: 'image_url',
@@ -191,9 +177,11 @@ Return ONLY a number.`
 export async function extractMultipleLocations(
   screenshot: string,
   selectedText: string,
-  url: string
+  url: string,
+  globalContext: GlobalContext | null = null
 ): Promise<ExtractionResult[]> {
   console.log('[AI Multi] Extracting multiple locations...')
+  console.log('[AI Multi] Has global context:', !!globalContext)
   
   try {
     const response = await openai.chat.completions.create({
@@ -203,60 +191,7 @@ export async function extractMultipleLocations(
         content: [
           {
             type: 'text',
-            text: `⚠️ CRITICAL: Extract DISTINCT/UNIQUE locations from HIGHLIGHTED TEXT ONLY.
-
-The screenshot is VISUAL CONTEXT. Do not extract locations visible in the screenshot that aren't mentioned in the highlighted text.
-
-User highlighted: "${selectedText}"
-
-Extract ALL DISTINCT locations mentioned in THIS TEXT.
-- If "Paris" mentioned 3 times → Extract it ONCE
-- If "Tokyo" and "Tokyo Tower" mentioned → Extract BOTH (different places)
-- If "Senso-ji" and "Senso-ji Temple" → Extract ONCE (same place)
-
-The screenshot helps you see the page, but extract UNIQUE locations ONLY from highlighted text.
-
-Deduplication Rules:
-✅ Same location mentioned multiple times → Return ONCE
-✅ Similar names for same place → Return ONCE
-✅ Different places (Tokyo vs Tokyo Tower) → Return BOTH
-
-Example:
-- Highlighted: "Tokyo, Tokyo, Kyoto, Tokyo, Osaka"
-- Screenshot shows: 20 other cities/places in thread → IGNORE THEM!
-- Extract: Tokyo (1x), Kyoto (1x), Osaka (1x) ← 3 DISTINCT locations
-
-What to extract (from highlighted text):
-✅ Cities, towns (Tokyo, Kyoto, Kamakura)
-✅ Neighborhoods (Shibuya, Asakusa)
-✅ Specific places (Disney Sea, Senso-ji Temple, Ichiran Ramen)
-✅ Landmarks (Tokyo Tower)
-✅ Hotels, restaurants, museums, parks
-
-What NOT to extract:
-❌ Day numbers ("Day 1")
-❌ Durations ("3 days")
-❌ Locations visible in screenshot but not in highlighted text
-❌ Duplicate mentions of same location
-
-Return as JSON:
-{
-  "locations": [
-    {
-      "location_name": "Exact name from highlighted text (deduplicated)",
-      "category": "city/restaurant/temple/etc",
-      "address": "If in highlighted text",
-      "tips": ["From highlighted text only"],
-      "confidence": 0.7
-    }
-  ]
-}
-
-Extract DISTINCT locations ONLY from: "${selectedText}" ← THIS TEXT ONLY
-Screenshot purpose: Visual context to understand ambiguous terms
-Return: UNIQUE locations only (no duplicates)
-
-Output valid JSON only.`
+            text: buildExtractMultipleLocationsPrompt(selectedText, url, globalContext)
           },
           {
             type: 'image_url',
@@ -268,7 +203,7 @@ Output valid JSON only.`
       max_tokens: 1500
     })
     
-    const result = JSON.parse(response.choices[0].message.content)
+    const result = JSON.parse(response.choices[0].message.content || '{}')
     const locations = result.locations || []
     console.log('[AI Multi] Extracted', locations.length, 'locations')
     return locations
@@ -286,10 +221,12 @@ export async function extractLocationVariations(
   screenshot: string,
   selectedText: string,
   url: string,
-  pageTitle: string
+  pageTitle: string,
+  globalContext: GlobalContext | null = null
 ): Promise<LocationVariation[]> {
   console.log('[AI Variations] Extracting 3 search queries...')
   console.log('[AI Variations] Selected text:', selectedText.substring(0, 100))
+  console.log('[AI Variations] Has global context:', !!globalContext)
   
   try {
     const response = await openai.chat.completions.create({
@@ -299,66 +236,7 @@ export async function extractLocationVariations(
         content: [
           {
             type: 'text',
-            text: `⚠️ CRITICAL: Extract location and create 3 Google Places search queries.
-
-User highlighted: "${selectedText}"
-
-The screenshot shows the FULL CONTEXT. Use it to:
-- Complete partial words (e.g., "ryu" → screenshot shows "Ryugon")
-- Add missing details (neighborhood, city, region, country)
-- Understand vague references ("this place" → what place in screenshot?)
-
-Create 3 search query variations from MOST specific to LEAST specific:
-
-1. HIGH SPECIFICITY (confidence: 0.85-0.95)
-   - Full name + neighborhood + city + region + country
-   - Example: "Ryugon Traditional Inn, Minamiuonuma, Niigata, Japan"
-   - Use ALL context from screenshot
-
-2. MEDIUM SPECIFICITY (confidence: 0.70-0.85)
-   - Name + city/region + country
-   - Example: "Ryugon Inn Niigata Japan"
-   - Core details only
-
-3. LOW SPECIFICITY (confidence: 0.60-0.70)
-   - Just the name (use screenshot to complete if partial)
-   - Example: "Ryugon"
-   - Simplest query
-
-IMPORTANT RULES:
-- If highlighted text is PARTIAL (e.g., "ryu"), use screenshot to find FULL name
-- Always include country in high/medium specificity
-- Return 3 distinct queries (not duplicates)
-- Confidence decreases as specificity decreases
-
-Source: ${url}
-Page title: "${pageTitle}"
-
-Return as JSON:
-{
-  "variations": [
-    {
-      "searchQuery": "Full query for Google Places",
-      "confidence": 0.90,
-      "reasoning": "Why this query will work",
-      "specificityLevel": "high"
-    },
-    {
-      "searchQuery": "Medium query",
-      "confidence": 0.75,
-      "reasoning": "Fallback if high fails",
-      "specificityLevel": "medium"
-    },
-    {
-      "searchQuery": "Simple query",
-      "confidence": 0.65,
-      "reasoning": "Last resort",
-      "specificityLevel": "low"
-    }
-  ]
-}
-
-Output valid JSON only.`
+            text: buildLocationVariationsPrompt(selectedText, url, pageTitle, globalContext)
           },
           {
             type: 'image_url',
@@ -371,10 +249,55 @@ Output valid JSON only.`
       temperature: 0.3
     })
     
-    const result = JSON.parse(response.choices[0].message.content || '{}')
+    const content = response.choices[0].message.content || '{}'
+    console.log('[AI Variations] Raw response:', content.substring(0, 200))
+    
+    const result = JSON.parse(content)
     const variations = result.variations || []
     
     console.log('[AI Variations] Generated:', variations.length, 'queries')
+    
+    // Validate we got 3 variations
+    if (variations.length === 0) {
+      console.error('[AI Variations] ❌ AI returned empty array! Using fallback.')
+      console.error('[AI Variations] Full response:', content)
+      
+      // Build fallback variations with context if available
+      if (globalContext) {
+        return [
+          {
+            searchQuery: `${selectedText.trim()}, ${globalContext.region || ''}, ${globalContext.country}`.replace(/,\s*,/g, ',').trim(),
+            confidence: 0.85,
+            reasoning: 'Fallback: Added context to input',
+            specificityLevel: 'high' as const
+          },
+          {
+            searchQuery: `${selectedText.trim()}, ${globalContext.country}`,
+            confidence: 0.70,
+            reasoning: 'Fallback: Added country to input',
+            specificityLevel: 'medium' as const
+          },
+          {
+            searchQuery: selectedText.trim(),
+            confidence: 0.60,
+            reasoning: 'Fallback: Using raw input',
+            specificityLevel: 'low' as const
+          }
+        ]
+      } else {
+        return [{
+          searchQuery: selectedText.trim(),
+          confidence: 0.5,
+          reasoning: 'AI extraction failed, using raw text',
+          specificityLevel: 'low' as const
+        }]
+      }
+    }
+    
+    if (variations.length < 3) {
+      console.warn('[AI Variations] ⚠️ AI returned only', variations.length, 'variations (expected 3)')
+    }
+    
     variations.forEach((v: LocationVariation, i: number) => {
       console.log(`  ${i+1}. "${v.searchQuery}" (${v.confidence})`)
     })
@@ -389,6 +312,64 @@ Output valid JSON only.`
       reasoning: 'AI extraction failed, using raw text',
       specificityLevel: 'low'
     }]
+  }
+}
+
+/**
+ * Extract global geographic context from screenshot and ALL selected text.
+ * Determines the primary city/country being discussed.
+ * 
+ * This runs ONCE per save action, analyzing the full page context.
+ */
+export async function extractGlobalContext(
+  screenshot: string,
+  selectedText: string,
+  url: string,
+  pageTitle: string
+): Promise<GlobalContext | null> {
+  console.log('[AI Context] Extracting global geographic context...')
+  console.log('[AI Context] Text length:', selectedText.length)
+  console.log('[AI Context] URL:', url)
+  
+  try {
+    const response = await openai.chat.completions.create({
+      model: 'gpt-4o',
+      messages: [{
+        role: 'user',
+        content: [
+          {
+            type: 'text',
+            text: buildGlobalContextPrompt(selectedText, url, pageTitle)
+          },
+          {
+            type: 'image_url',
+            image_url: { url: screenshot }
+          }
+        ]
+      }],
+      response_format: { type: 'json_object' },
+      max_tokens: 500,
+      temperature: 0.2  // Lower temperature for more consistent extraction
+    })
+    
+    const result = JSON.parse(response.choices[0].message.content || 'null')
+    
+    if (!result || !result.country) {
+      console.log('[AI Context] ⚠️ No clear geographic context detected')
+      return null
+    }
+    
+    console.log('[AI Context] ✅ Detected context:')
+    console.log(`[AI Context]    City: ${result.city || 'unknown'}`)
+    console.log(`[AI Context]    Country: ${result.country} (${result.countryCode})`)
+    console.log(`[AI Context]    Coords: ${result.approximateCoordinates?.lat}, ${result.approximateCoordinates?.lng}`)
+    console.log(`[AI Context]    Confidence: ${result.confidence}`)
+    console.log(`[AI Context]    Reasoning: ${result.reasoning}`)
+    
+    return result as GlobalContext
+  } catch (error) {
+    console.error('[AI Context] Failed:', error)
+    return null
   }
 }
 
