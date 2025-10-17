@@ -3,7 +3,7 @@ import { z } from 'zod'
 // Location validation schemas
 export const createLocationSchema = z.object({
   userId: z.string().uuid('Invalid user ID format'),
-  countryId: z.string().uuid('Invalid country ID format'),
+  countryId: z.string().uuid('Invalid country ID format').nullable().optional(), // Optional - backend AI will detect
   name: z.string().min(1, 'Name is required').max(255, 'Name too long'),
   originalText: z.string().min(1, 'Original text is required'),
   sourceUrl: z.string().url('Invalid source URL'),

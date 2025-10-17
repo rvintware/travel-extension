@@ -79,27 +79,6 @@ export async function saveSettings(settings: Settings): Promise<void> {
 }
 
 /**
- * Get default country ID
- */
-export async function getDefaultCountry(): Promise<string | null> {
-  const settings = await getSettings()
-  return settings?.defaultCountryId || null
-}
-
-/**
- * Set default country ID
- */
-export async function setDefaultCountry(countryId: string): Promise<void> {
-  const settings = await getSettings() || {
-    defaultCountryId: countryId,
-    defaultView: 'trips',
-    rememberLastTab: false,
-  }
-  settings.defaultCountryId = countryId
-  await saveSettings(settings)
-}
-
-/**
  * Get default trip ID
  */
 export async function getDefaultTrip(): Promise<string | null> {
@@ -112,7 +91,6 @@ export async function getDefaultTrip(): Promise<string | null> {
  */
 export async function setDefaultTrip(tripId: string | null): Promise<void> {
   const settings = await getSettings() || {
-    defaultCountryId: '',
     defaultView: 'trips',
     rememberLastTab: false,
   }

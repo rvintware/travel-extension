@@ -28,13 +28,32 @@ export async function POST(request: Request) {
     await ensureUser(validated.userId)
     console.log('[API] ✅ User ensured')
     
+    // 🔧 NEW: If no countryId provided, use Uncategorized as placeholder
+    let finalCountryId = validated.countryId
+    if (!finalCountryId) {
+      console.log('[API] No country provided, using Uncategorized placeholder...')
+      const { data: uncategorized, error: countryError } = await supabase
+        .from('countries')
+        .select('id')
+        .eq('code', 'XX')
+        .single()
+      
+      if (countryError || !uncategorized) {
+        console.error('[API] ❌ Uncategorized country not found!')
+        throw new Error('Uncategorized country not found in database. Please run migration: add_uncategorized_country.sql')
+      }
+      
+      finalCountryId = uncategorized.id
+      console.log('[API] ✅ Using Uncategorized country:', finalCountryId)
+    }
+    
     // Insert location with pending status (will be enriched by AI)
     console.log('[API] Inserting location to Supabase...')
     const { data, error } = await supabase
       .from('locations')
       .insert({
         user_id: validated.userId,
-        country_id: validated.countryId,
+        country_id: finalCountryId,
         name: validated.name,
         original_text: validated.originalText,
         source_url: validated.sourceUrl,

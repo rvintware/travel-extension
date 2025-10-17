@@ -18,7 +18,6 @@ export interface SavedCapture {
 // ============================================================================
 
 export interface Settings {
-  defaultCountryId: string;
   defaultTripId?: string;
   defaultView: 'trips' | 'locations';
   rememberLastTab: boolean;

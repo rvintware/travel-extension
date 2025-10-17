@@ -1,4 +1,4 @@
-import { getUserId, getSettings, getDefaultCountry, getDefaultTrip } from "../lib/storage"
+import { getUserId, getSettings, getDefaultTrip } from "../lib/storage"
 import * as api from "../lib/api"
 
 // Context menu IDs
@@ -17,7 +17,6 @@ chrome.runtime.onInstalled.addListener(async () => {
   if (!settings) {
     await chrome.storage.local.set({
       settings: {
-        defaultCountryId: null,  // No default country initially
         defaultView: 'trips',
         rememberLastTab: false,
         defaultTripId: null,     // No default trip initially
@@ -41,7 +40,6 @@ async function updateContextMenus() {
     
     const settings = await getSettings()
     const defaultTrip = settings?.defaultTripId
-    const defaultCountryId = settings?.defaultCountryId
     
     // Show trip menu if default trip is set
     if (defaultTrip) {
@@ -56,33 +54,15 @@ async function updateContextMenus() {
         })
       } catch (error) {
         console.error('[BG] Failed to fetch trip:', error)
-      }
-    }
-    
-    // 🔧 ALWAYS show library option (even without default country)
-    if (defaultCountryId) {
-      // User has set a default country - show it
-      try {
-        const countries = await api.getCountries()
-        const country = countries.find((c: any) => c.id === defaultCountryId)
-        const countryName = country?.name || 'Library'
-        const emoji = country?.emoji || '📚'
-        
+        // Fallback to generic save
         chrome.contextMenus.create({
           id: MENU_ID_LIBRARY,
-          title: `${emoji} Save to ${countryName} Library`,
-          contexts: ['selection'],
-        })
-      } catch (error) {
-        // Fallback to generic
-        chrome.contextMenus.create({
-          id: MENU_ID_LIBRARY,
-          title: '📚 Save to Library',
+          title: '📍 Save Location',
           contexts: ['selection'],
         })
       }
     } else {
-      // 🔧 NEW: No default country - show generic save option
+      // No active trip - show generic save option
       chrome.contextMenus.create({
         id: MENU_ID_LIBRARY,
         title: '📍 Save Location',
@@ -113,28 +93,9 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
     console.log('[BG] Getting user settings...')
     const userId = await getUserId()
     const settings = await getSettings()
-    let defaultCountryId = settings?.defaultCountryId
     
     console.log('[BG] User ID:', userId)
-    console.log('[BG] Default country ID:', defaultCountryId)
-    
-    // 🔧 NEW: Auto-select first country if no default is set
-    let finalCountryId = defaultCountryId
-    if (!finalCountryId) {
-      console.log('[BG] No default country, auto-selecting first available...')
-      const countries = await api.getCountries()
-      if (countries.length === 0) {
-        throw new Error('No countries available. Please contact support.')
-      }
-      finalCountryId = countries[0].id
-      console.log('[BG] Auto-selected:', countries[0].name, countries[0].emoji)
-    }
-    
-    // Get country info for toast message
-    console.log('[BG] Fetching countries...')
-    const countries = await api.getCountries()
-    const country = countries.find((c: any) => c.id === finalCountryId)
-    console.log('[BG] Country:', country?.name)
+    console.log('[BG] Country detection: Backend AI')
     
     // Take screenshot (no content script needed!)
     console.log('[BG] Taking screenshot...')
@@ -149,21 +110,21 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
       console.error('[BG] Screenshot failed:', error)
     }
     
-    // Create location in pool with screenshot
+    // Create location - backend will detect country via AI
     console.log('[BG] Calling backend API...')
     console.log('[BG] Has screenshot:', !!screenshot)
     
     const location = await api.saveLocation({
       userId,
-      countryId: finalCountryId,
+      countryId: null, // Let backend AI detect country
       name: api.extractNameFromText(info.selectionText),
       originalText: info.selectionText,
       sourceUrl: tab.url || '',
       pageTitle: tab.title || 'Untitled',
-      screenshot: screenshot, // Phase 0.3: Screenshot for AI vision
+      screenshot: screenshot, // Screenshot for AI vision
       tripId: info.menuItemId === MENU_ID_TRIP && settings?.defaultTripId 
         ? settings.defaultTripId 
-        : undefined // Phase 0.3: For multi-location trip linking
+        : undefined
     })
     
     console.log('[BG] ✅ Location created:', location.id)
@@ -189,8 +150,7 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
       await showToast(tab.id, `✓ ${tripName}`)
     } else {
       // Saved to library only
-      const countryName = country?.name || 'Library'
-      await showToast(tab.id, `✓ ${countryName} Library`)
+      await showToast(tab.id, `✓ Saved`)
     }
     
     // Notify popup if open

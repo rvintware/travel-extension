@@ -143,8 +143,18 @@ export const processLocation = inngest.createFunction(
           }
         }
         
-        // Fallback: Use placeholder
-        console.log('[Job] No country detected, using placeholder')
+        // Priority 3: Use Uncategorized country
+        if (!countryId) {
+          console.log('[Job] ⚠️ No country detected - using Uncategorized')
+          const uncategorized = countries.find(c => c.code === 'XX')
+          if (uncategorized) {
+            console.log('[Job] 🌍 Fallback to: Uncategorized (XX)')
+            return uncategorized.id
+          } else {
+            throw new Error('Uncategorized country not found in database')
+          }
+        }
+        
         return countryId
       })
       
@@ -194,6 +204,23 @@ export const processLocation = inngest.createFunction(
           if (globalContext?.approximateCoordinates) {
             console.log('[Job] ⚠️ Google failed, using coordinate fallback')
             
+            // 🔧 Log if country changed
+            if (countryId && detectedCountryId !== countryId) {
+              const { data: oldCountry } = await supabase
+                .from('countries')
+                .select('name, code')
+                .eq('id', countryId)
+                .single()
+              
+              const { data: newCountry } = await supabase
+                .from('countries')
+                .select('name, code')
+                .eq('id', detectedCountryId)
+                .single()
+              
+              console.log(`[Job] 🔄 Country updated: ${oldCountry?.name} (${oldCountry?.code}) → ${newCountry?.name} (${newCountry?.code})`)
+            }
+            
             const { data, error } = await supabase
               .from('locations')
               .update({
@@ -222,6 +249,24 @@ export const processLocation = inngest.createFunction(
           
           // No coordinates, just save with name
           console.log('[Job] ❌ No Google result and no coordinates')
+          
+          // 🔧 Log if country changed
+          if (countryId && detectedCountryId !== countryId) {
+            const { data: oldCountry } = await supabase
+              .from('countries')
+              .select('name, code')
+              .eq('id', countryId)
+              .single()
+            
+            const { data: newCountry } = await supabase
+              .from('countries')
+              .select('name, code')
+              .eq('id', detectedCountryId)
+              .single()
+            
+            console.log(`[Job] 🔄 Country updated: ${oldCountry?.name} (${oldCountry?.code}) → ${newCountry?.name} (${newCountry?.code})`)
+          }
+          
           const { data, error } = await supabase
             .from('locations')
             .update({
@@ -242,6 +287,23 @@ export const processLocation = inngest.createFunction(
         }
         
         // Success! Update with Google data
+        // 🔧 Log if country changed from initial value
+        if (countryId && detectedCountryId !== countryId) {
+          const { data: oldCountry } = await supabase
+            .from('countries')
+            .select('name, code')
+            .eq('id', countryId)
+            .single()
+          
+          const { data: newCountry } = await supabase
+            .from('countries')
+            .select('name, code')
+            .eq('id', detectedCountryId)
+            .single()
+          
+          console.log(`[Job] 🔄 Country updated: ${oldCountry?.name} (${oldCountry?.code}) → ${newCountry?.name} (${newCountry?.code})`)
+        }
+        
         const updateData: any = {
           name: place.name,
           country_id: detectedCountryId,  // 🔧 Update country!
@@ -360,14 +422,25 @@ export const processLocation = inngest.createFunction(
         // Phase 2: Keep all non-countries (provinces, states, regions are valid locations!)
         const targetLocations = nonCountries  // No filtering - keep everything except countries
         
-        // Use detected country if found, otherwise use the one from extension
-        const finalCountryId = detectedCountry?.id || countryId
+        // Priority 3: Use detected country, fallback to Uncategorized
+        let finalCountryId = detectedCountry?.id || countryId
+        
+        if (!finalCountryId) {
+          console.log('[Job] ⚠️ No country detected - using Uncategorized')
+          const uncategorized = countries.find(c => c.code === 'XX')
+          if (uncategorized) {
+            finalCountryId = uncategorized.id
+            console.log('[Job] 🌍 Fallback to: Uncategorized (XX)')
+          } else {
+            throw new Error('Uncategorized country not found in database')
+          }
+        }
         
         console.log(`[Job] ✅ Filtering complete:`)
         console.log(`[Job]    Original: ${locations.length}`)
         console.log(`[Job]    Countries removed: ${locations.length - nonCountries.length}`)
         console.log(`[Job]    Target locations: ${targetLocations.length}`)
-        console.log(`[Job]    Final country: ${detectedCountry?.name || 'auto-selected'}`)
+        console.log(`[Job]    Final country: ${detectedCountry?.name || 'Uncategorized'}`)
         
         return { 
           detectedCountryId: finalCountryId, 

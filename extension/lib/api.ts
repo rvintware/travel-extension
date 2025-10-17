@@ -38,7 +38,7 @@ export async function getCountries() {
  */
 export async function saveLocation(data: {
   userId: string
-  countryId: string
+  countryId?: string | null  // Optional - backend AI will detect country
   name: string
   originalText: string
   sourceUrl: string
