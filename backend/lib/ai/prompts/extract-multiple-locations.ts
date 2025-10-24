@@ -23,6 +23,18 @@ The screenshot is VISUAL CONTEXT. Do not extract locations visible in the screen
 
 User highlighted: "${selectedText}"
 
+🔍 CONTEXT READING INSTRUCTION:
+READ THE SENTENCE in the screenshot containing each highlighted location.
+This helps you understand what type of place it is and its proper name.
+
+Look for clues:
+- "restaurant called ${selectedText}" → Extract as: restaurant
+- "we ate at ${selectedText}" → It's a dining place
+- "${selectedText} is a temple/hotel/cafe" → Use that type
+- "stayed at ${selectedText}" → It's accommodation
+
+This sentence context helps you determine the correct category and search query.
+
 Extract ALL DISTINCT locations mentioned in THIS TEXT.
 - If "Paris" mentioned 3 times → Extract it ONCE
 - If "Tokyo" and "Tokyo Tower" mentioned → Extract BOTH (different places)
@@ -30,9 +42,10 @@ Extract ALL DISTINCT locations mentioned in THIS TEXT.
 
 ${globalContext ? `
 **IMPORTANT: Enrich each location with context!**
-- If location is generic ("brewery"), add city: "Tsingtao brewery, ${globalContext.city}"
-- If location is specific ("Tsingtao Brewery"), keep as-is
-- Always include country in address if not already present
+- READ THE SENTENCE to find what type of place it is (restaurant/hotel/temple/etc)
+- If generic term ("brewery"), use sentence + global context: "Tsingtao brewery, ${globalContext.city}"
+- If proper noun ("Shinsuke"), use sentence to find type: "Shinsuke restaurant, ${globalContext.city}"
+- Always include: [name] [type], ${globalContext.city}, ${globalContext.country}
 ` : ''}
 
 The screenshot helps you see the page, but extract UNIQUE locations ONLY from highlighted text.

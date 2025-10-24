@@ -108,6 +108,22 @@ export function TripDetail({ trip, onBack }: TripDetailProps) {
   
   const timeEstimate = calculateTimeEstimate()
   
+  function openMapPopup() {
+    // Get API key from environment (available in extension context)
+    const apiKey = process.env.PLASMO_PUBLIC_GOOGLE_PLACES_API_KEY || ''
+    
+    // TODO: For production, migrate to backend proxy to avoid exposing API key
+    // See: Backend endpoint /api/trips/:id/map-render-config
+    
+    // Open in browser tab instead of popup window to avoid MV3 CSP restrictions
+    chrome.tabs.create({
+      url: chrome.runtime.getURL(
+        `tabs/map.html?tripId=${trip.id}&apiKey=${encodeURIComponent(apiKey)}`
+      ),
+      active: true, // Focus the new tab
+    })
+  }
+  
   const handleAction = async (location: LocationWithTripData, action: GearAction, data?: any) => {
     switch (action) {
       case 'set-time':
@@ -213,6 +229,14 @@ export function TripDetail({ trip, onBack }: TripDetailProps) {
                 </span>
               )}
               <span>· {locations.length} {locations.length === 1 ? 'location' : 'locations'}</span>
+              <span>·</span>
+              <button
+                onClick={openMapPopup}
+                className="text-primary hover:text-primary-dark transition-colors flex items-center gap-1 font-medium"
+              >
+                <span>🗺️</span>
+                <span>Map View</span>
+              </button>
             </p>
           </div>
         </div>

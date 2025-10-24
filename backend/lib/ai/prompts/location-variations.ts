@@ -23,6 +23,162 @@ Use this context to create better search queries!
 
 User highlighted: "${selectedText}"
 
+**🔍 CONTEXT EXTRACTION HIERARCHY:**
+
+Before classifying as SPECIFIC or GENERIC, you MUST read context in this order:
+
+**LAYER 1: IMMEDIATE SENTENCE (HIGHEST PRIORITY)**
+Find the sentence in the screenshot that contains "${selectedText}".
+
+Look for these patterns:
+1. **Type + Name Pattern:**
+   - "restaurant called X" → Type: restaurant, Name: X
+   - "X hotel" → Type: hotel, Name: X
+   - "temple of X" → Type: temple, Name: X
+   - "X shrine" → Type: shrine, Name: X
+   - "cafe named X" → Type: cafe, Name: X
+
+2. **Descriptors:**
+   - "small", "traditional", "famous", "local", "popular"
+   - "historic", "modern", "authentic"
+   
+3. **Actions/Context:**
+   - "we ate at X" → dining
+   - "we stayed at X" → accommodation
+   - "we visited X" → attraction
+
+**LAYER 2: PARAGRAPH CONTEXT (MEDIUM PRIORITY)**
+Read the full paragraph containing that sentence.
+
+Look for:
+1. **Neighborhood/District:**
+   - "in [Neighborhood]" (e.g., "in Tenjin", "in Shibuya")
+   - "[Neighborhood] area/district"
+   - "the [Neighborhood] neighborhood"
+
+2. **Spatial References:**
+   - "near the station"
+   - "walking distance from X"
+   - "across from Y"
+   - "in the shopping district"
+
+3. **Location Context:**
+   - "we stayed in X and..." → X is the general area
+   - "exploring the Y area" → Y is the district
+
+**LAYER 3: PAGE CONTEXT (LOWER PRIORITY)**
+Look at the visible page/post.
+
+Look for:
+1. **Post Title/Heading:**
+   - "Trip to [City]"
+   - "[City] recommendations"
+   - "Where to eat in [City]"
+
+2. **Subreddit/Forum:**
+   - r/JapanTravel → Country: Japan
+   - r/paris → City: Paris
+
+3. **Overall Topic:**
+   - What city is the main subject?
+   - What country is being discussed?
+
+**LAYER 4: GLOBAL CONTEXT (BASELINE)**
+${globalContext ? `
+You already have this information:
+- City: ${globalContext.city}
+- Region: ${globalContext.region}
+- Country: ${globalContext.country}
+- Confidence: ${globalContext.confidence}
+` : 'No global context available - rely on Layers 1-3.'}
+
+---
+
+**HOW TO COMBINE LAYERS:**
+
+Build your 3 search queries by progressively combining layers:
+
+**HIGH specificity query (all layers):**
+Combine: Name (L1) + Type (L1) + District (L2) + City (L3/L4) + Country (L4)
+Example: "Shinsuke restaurant, Tenjin, Fukuoka, Japan"
+
+**MEDIUM specificity query (most layers):**
+Combine: Name (L1) + Type (L1) + City (L3/L4) + Country (L4)
+Example: "Shinsuke restaurant, Fukuoka, Japan"
+
+**LOW specificity query (minimal layers):**
+Combine: Name (L1) + Type (L1) + City (L3/L4)
+Example: "Shinsuke restaurant Fukuoka"
+
+---
+
+**EXAMPLES OF LAYER EXTRACTION:**
+
+**Example 1: "Shinsuke" highlighted**
+LAYER 1 (sentence): "We walked into a small restaurant called Shinsuke"
+→ Extract: Type=restaurant, Descriptor=small, Name=Shinsuke
+
+LAYER 2 (paragraph): "We stayed in Tenjin and liked the eating and shopping..."
+→ Extract: District=Tenjin, Context=dining area
+
+LAYER 3 (page): Post title: "Fukuoka recommendations"
+→ Extract: City=Fukuoka
+
+LAYER 4 (global): Country=Japan, City=Fukuoka
+→ Use: Country=Japan
+
+COMBINED QUERIES:
+1. HIGH: "Shinsuke restaurant, Tenjin, Fukuoka, Japan" (0.90)
+2. MEDIUM: "Shinsuke restaurant, Fukuoka, Japan" (0.75)
+3. LOW: "Shinsuke restaurant Fukuoka" (0.65)
+
+**Example 2: "brewery" highlighted**
+LAYER 1: "couldn't resist queuing up for the matcha brûlée crepe thing at Tenjin Tabanenoshi"
+→ Extract: Type=dessert/cafe, Place=Tenjin Tabanenoshi, Action=queuing
+
+LAYER 2: "We stayed in Tenjin and liked the eating and shopping"
+→ Extract: District=Tenjin
+
+LAYER 3: Page shows discussion about Fukuoka
+→ Extract: City=Fukuoka
+
+COMBINED QUERIES:
+1. HIGH: "Tenjin Tabanenoshi, Tenjin, Fukuoka, Japan" (0.85)
+2. MEDIUM: "Tenjin Tabanenoshi Fukuoka" (0.75)
+3. LOW: "Tabanenoshi Tenjin" (0.65)
+
+**Example 3: "Qingdao" highlighted**
+LAYER 1: Just "Qingdao" (a city name)
+→ Extract: Type=city, Name=Qingdao (SPECIFIC)
+
+LAYER 2: Discussion mentions "Tsingtao brewery and old German city"
+→ Extract: Context=city discussion, Landmarks mentioned
+
+LAYER 3: Reddit post about China travel
+→ Extract: Country=China
+
+LAYER 4: Global context confirms Qingdao, China
+→ Use: City=Qingdao, Region=Shandong, Country=China
+
+COMBINED QUERIES (for SPECIFIC city name):
+1. HIGH: "Qingdao, Shandong Province, China" (0.90)
+2. MEDIUM: "Qingdao, China" (0.75)
+3. LOW: "Qingdao" (0.65)
+
+---
+
+**CRITICAL RULES:**
+
+1. **ALWAYS read Layer 1 first** - The immediate sentence is the most important
+2. **Extract the TYPE** from Layer 1 - Is it a restaurant? Hotel? Temple?
+3. **Layer 2 gives LOCATION** - Usually a neighborhood/district
+4. **Layer 3 gives CITY** - The overall city being discussed
+5. **Combine ALL layers** in your HIGH query for maximum specificity
+6. **If Layer 1 is GENERIC** ("brewery", "temple"), look for the actual NAME in the sentence
+7. **If Layer 1 is SPECIFIC** ("Shinsuke", "Qingdao"), use it literally
+
+---
+
 **CRITICAL PRIORITY RULE - READ THIS FIRST:**
 
 1. **Is "${selectedText}" SPECIFIC or GENERIC?**
