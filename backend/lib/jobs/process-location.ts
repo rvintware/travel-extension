@@ -1,7 +1,8 @@
 import { inngest } from '../inngest'
 import { supabase } from '../supabase'
-import { extractFromScreenshot, countLocations, extractMultipleLocations, extractLocationVariations, extractGlobalContext, GlobalContext } from '../ai/extract'
-import { searchGooglePlaces } from '../places/search'
+import { extractFromScreenshot, countLocations, extractMultipleLocations, extractLocationVariations, extractGlobalContext, GlobalContext, extractTieredTips } from '../ai/extract'
+import { searchGooglePlaces, fetchGoogleReviews } from '../places/search'
+import { findExistingLocation, mergeIntoExisting } from '../locations/merge'
 
 /**
  * Inngest function to process location(s) with AI and Google Places
@@ -194,6 +195,115 @@ export const processLocation = inngest.createFunction(
         }
       })
       
+      // 🆕 STEP 3.5: Fetch Google Reviews (PHASE 2: TIERED TIPS)
+      const reviews = await step.run('fetch-google-reviews', async () => {
+        if (!placeResult?.place || !placeResult.place.place_id) {
+          console.log('[Job] No place_id, skipping reviews')
+          return []
+        }
+        
+        console.log('[Job] Fetching Google reviews...')
+        const fetchedReviews = await fetchGoogleReviews(placeResult.place.place_id)
+        console.log(`[Job] Fetched ${fetchedReviews.length} reviews`)
+        
+        return fetchedReviews
+      })
+      
+      // 🆕 STEP 3.6: Extract Tiered Tips (PHASE 2: TIERED TIPS)
+      const tieredTips = await step.run('extract-tiered-tips', async () => {
+        if (!screenshot) {
+          console.log('[Job] No screenshot, skipping tip extraction')
+          return []
+        }
+        
+        console.log('[Job] Extracting tiered tips...')
+        const tips = await extractTieredTips(screenshot, selectedText, reviews)
+        console.log(`[Job] Extracted ${tips.length} tiered tips`)
+        
+        return tips
+      })
+      
+      // 🆕 STEP 3.7: Check for Duplicate Location (PHASE 1: DEDUPLICATION)
+      const duplicateCheck = await step.run('check-duplicate', async () => {
+        if (!placeResult?.place || !placeResult.place.place_id) {
+          console.log('[Job] No place_id, skipping duplicate check')
+          return { isDuplicate: false, existingLocation: null }
+        }
+        
+        console.log('[Job] Checking for duplicate with place_id:', placeResult.place.place_id)
+        const existing = await findExistingLocation(userId, placeResult.place.place_id)
+        
+        if (existing) {
+          console.log('[Job] 🔄 Duplicate found! Existing location:', existing.id)
+        } else {
+          console.log('[Job] ✅ No duplicate, creating new location')
+        }
+        
+        return {
+          isDuplicate: !!existing,
+          existingLocation: existing
+        }
+      })
+      
+      // If duplicate found, merge instead of updating placeholder
+      if (duplicateCheck.isDuplicate && duplicateCheck.existingLocation) {
+        console.log('[Job] 🔄 Duplicate detected, merging...')
+        
+        // Merge tips and sources
+        const merged = await step.run('merge-duplicate', async () => {
+          const result = await mergeIntoExisting(
+            duplicateCheck.existingLocation.id,
+            {
+              tips: tieredTips,  // 🔧 Use new tiered tips
+              sourceUrl: url,
+              sources: [url]
+            }
+          )
+          
+          console.log('[Job] ✅ Merged successfully, added', result.tipsAdded, 'tips')
+          
+          // Link to trip if specified
+          if (tripId) {
+            console.log('[Job] Linking merged location to trip:', tripId)
+            const { error: linkError } = await supabase
+              .from('trip_locations')
+              .insert({
+                trip_id: tripId,
+                location_id: duplicateCheck.existingLocation.id,
+                display_order: 0
+              })
+              .select()
+            
+            // Ignore if already linked (duplicate link error)
+            if (linkError && linkError.code !== '23505') {
+              console.error('[Job] ❌ Failed to link to trip:', linkError)
+              throw linkError
+            } else if (linkError?.code === '23505') {
+              console.log('[Job] Location already linked to this trip')
+            } else {
+              console.log('[Job] ✅ Linked to trip successfully')
+            }
+          }
+          
+          return result
+        })
+        
+        // Delete the placeholder location
+        await step.run('delete-placeholder', async () => {
+          console.log('[Job] Deleting placeholder location:', locationId)
+          await supabase.from('locations').delete().eq('id', locationId)
+        })
+        
+        return {
+          success: true,
+          merged: true,
+          locationId: duplicateCheck.existingLocation.id,
+          tipsAdded: merged.tipsAdded,
+          message: 'Merged into existing location'
+        }
+      }
+      
+      // Otherwise, continue with normal flow (update placeholder)
       // Step 3: Update placeholder with result AND detected country
       const updated = await step.run('update-placeholder', async () => {
         // 🔧 Always have fallbackName from placeResult (no more undefined error)
@@ -230,6 +340,7 @@ export const processLocation = inngest.createFunction(
                 lng: globalContext.approximateCoordinates.lng,
                 address: `${globalContext.city}, ${globalContext.region || ''}, ${globalContext.country}`.trim(),
                 summary: `Location in ${globalContext.city}, ${globalContext.country} (coordinates estimated by AI)`,
+                tips: tieredTips,  // 🔧 PHASE 2: Include tiered tips
                 location_verified: false,
                 confidence_score: Math.max(confidence, globalContext.confidence * 0.7),
                 processing_status: 'complete',
@@ -273,6 +384,7 @@ export const processLocation = inngest.createFunction(
               name: fallbackName,
               country_id: detectedCountryId,
               summary: `Extracted from: "${selectedText}"`,
+              tips: tieredTips,  // 🔧 PHASE 2: Include tiered tips
               location_verified: false,
               confidence_score: confidence,
               processing_status: 'complete',
@@ -315,6 +427,7 @@ export const processLocation = inngest.createFunction(
           location_verified: true,
           confidence_score: confidence,
           summary: `Found via: "${usedQuery}" (attempt ${attemptNumber})`,
+          tips: tieredTips,  // 🔧 PHASE 2: Use tiered tips instead of old summary
           processing_status: 'complete',
           processed_at: new Date().toISOString()
         }

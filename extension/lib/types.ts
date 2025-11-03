@@ -31,6 +31,13 @@ export interface Country {
   region: string | null;
 }
 
+export interface TipObject {
+  text: string
+  source: 'highlight' | 'context' | 'page' | 'google_reviews'
+  confidence: number
+  review_rating?: number  // Only for google_reviews
+}
+
 export interface Location {
   id: string;
   user_id: string;
@@ -43,7 +50,7 @@ export interface Location {
   category?: string | null;
   subcategory?: string | null;
   summary?: string | null;
-  tips: string[];  // JSONB array
+  tips: TipObject[];  // PHASE 2: Structured tips with source tags
   photos: string[];
   user_notes?: string | null;
   user_rating?: number | null;
