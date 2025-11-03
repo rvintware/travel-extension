@@ -5,6 +5,7 @@ import {
   buildExtractMultipleLocationsPrompt,
   buildLocationVariationsPrompt
 } from './prompts'
+import { buildExtractTipsPrompt } from './prompts/extract-tips'
 
 if (!process.env.OPENAI_API_KEY) {
   console.warn('OPENAI_API_KEY not set - AI extraction will fail')
@@ -370,6 +371,66 @@ export async function extractGlobalContext(
   } catch (error) {
     console.error('[AI Context] Failed:', error)
     return null
+  }
+}
+
+interface TipExtractionResult {
+  text: string
+  source: 'highlight' | 'context' | 'page' | 'google_reviews'
+  confidence: number
+  review_rating?: number
+}
+
+/**
+ * Extract 3 tiered tips from screenshot + reviews
+ * Uses single comprehensive prompt for efficiency
+ */
+export async function extractTieredTips(
+  screenshot: string,
+  selectedText: string,
+  reviews: Array<{ rating: number; text: string }>
+): Promise<TipExtractionResult[]> {
+  console.log('[AI Tips] Extracting tiered tips...')
+  console.log('[AI Tips] Selected text:', selectedText.substring(0, 100))
+  console.log('[AI Tips] Reviews available:', reviews.length)
+  
+  try {
+    const prompt = buildExtractTipsPrompt(selectedText, reviews)
+    
+    const response = await openai.chat.completions.create({
+      model: 'gpt-4o',  // Vision-capable
+      messages: [{
+        role: 'user',
+        content: [
+          { type: 'text', text: prompt },
+          { 
+            type: 'image_url', 
+            image_url: { 
+              url: screenshot,
+              detail: 'low'  // Low detail = cheaper, sufficient for text
+            } 
+          }
+        ]
+      }],
+      response_format: { type: 'json_object' },
+      temperature: 0.3,  // Lower temp for consistent extraction
+      max_tokens: 500
+    })
+    
+    const result = JSON.parse(response.choices[0].message.content || '{"tips":[]}')
+    const tips = result.tips || []
+    
+    console.log(`[AI Tips] Extracted ${tips.length} tips:`)
+    tips.forEach((tip: TipExtractionResult, i: number) => {
+      console.log(`[AI Tips]   ${i + 1}. [${tip.source}] ${tip.text}`)
+    })
+    
+    // Ensure max 3 tips
+    return tips.slice(0, 3)
+    
+  } catch (error) {
+    console.error('[AI Tips] Extraction failed:', error)
+    return []
   }
 }
 

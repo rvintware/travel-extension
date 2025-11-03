@@ -72,6 +72,7 @@ export interface Database {
           is_favorite: boolean
           original_text: string
           source_url: string
+          sources: Json  // Array of source URLs
           page_title: string | null
           html_context: string | null
           is_from_itinerary: boolean
@@ -105,6 +106,7 @@ export interface Database {
           is_favorite?: boolean
           original_text: string
           source_url: string
+          sources?: Json  // Array of source URLs
           page_title?: string | null
           html_context?: string | null
           is_from_itinerary?: boolean
@@ -241,5 +243,24 @@ export interface Database {
       }
     }
   }
+}
+
+// ============================================================================
+// Helper Types for Deduplication (Phase 1)
+// ============================================================================
+
+export interface TipObject {
+  text: string
+  source?: string
+  priority?: number
+  confidence?: number
+  review_rating?: number
+}
+
+export interface LocationMergeResult {
+  location: any  // Full location object
+  merged: boolean
+  tipsAdded: number
+  message: string
 }
 

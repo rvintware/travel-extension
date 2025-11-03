@@ -106,3 +106,56 @@ export async function searchGooglePlaces(
   }
 }
 
+interface GoogleReview {
+  author_name: string
+  rating: number
+  text: string
+  time: number
+}
+
+/**
+ * Fetch reviews for a place from Google Places API
+ * Returns top 5 reviews sorted by rating (5-star first)
+ */
+export async function fetchGoogleReviews(
+  placeId: string
+): Promise<GoogleReview[]> {
+  if (!process.env.GOOGLE_PLACES_API_KEY) {
+    console.error('[Google Places] API key not set')
+    return []
+  }
+  
+  try {
+    console.log(`[Google Places] Fetching reviews for: ${placeId}`)
+    
+    const detailsResponse = await client.placeDetails({
+      params: {
+        place_id: placeId,
+        fields: ['reviews'],
+        key: process.env.GOOGLE_PLACES_API_KEY
+      },
+      timeout: 5000
+    })
+    
+    const reviews = detailsResponse.data.result?.reviews || []
+    
+    // Sort by rating (5-star first) and take top 5
+    const topReviews = reviews
+      .sort((a, b) => (b.rating || 0) - (a.rating || 0))
+      .slice(0, 5)
+      .map(r => ({
+        author_name: r.author_name || 'Anonymous',
+        rating: r.rating || 0,
+        text: r.text || '',
+        time: r.time || 0
+      }))
+    
+    console.log(`[Google Places] Found ${topReviews.length} reviews`)
+    return topReviews
+    
+  } catch (error) {
+    console.error('[Google Places] Review fetch failed:', error)
+    return []
+  }
+}
+

@@ -1,5 +1,5 @@
 import React from 'react'
-import type { Location, LocationWithTripData } from '../lib/types'
+import type { Location, LocationWithTripData, TipObject } from '../lib/types'
 import { formatRelativeTime, getDomain, getSourceEmoji } from '../lib/utils'
 import { GearMenu, type GearAction } from './GearMenu'
 
@@ -127,8 +127,9 @@ export function LocationCard({ location, context, days, onAction }: LocationCard
               <div className="text-sm font-semibold text-gray-700 mb-2">💡 Tips</div>
               <ul className="space-y-1.5">
                 {tips.map((tip, index) => (
-                  <li key={index} className="text-sm text-gray-700">
-                    • "{tip}"
+                  <li key={index} className="text-sm text-gray-700 flex gap-2">
+                    <span className="flex-shrink-0">{getSourceIcon(tip.source)}</span>
+                    <span>"{tip.text}"</span>
                   </li>
                 ))}
               </ul>
@@ -155,4 +156,18 @@ export function LocationCard({ location, context, days, onAction }: LocationCard
       </div>
     </div>
   )
+}
+
+/**
+ * Get emoji icon for tip source
+ * PHASE 2: Visual indicators for where tips came from
+ */
+function getSourceIcon(source: string): string {
+  switch (source) {
+    case 'highlight': return '📝'  // User's highlighted text
+    case 'context': return '📄'    // Surrounding paragraph
+    case 'page': return '🌐'       // Page content
+    case 'google_reviews': return '⭐' // Google reviews
+    default: return '💡'           // Fallback
+  }
 }
