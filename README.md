@@ -653,12 +653,6 @@ Dimensions:
 **Documentation:** 2,500+ lines across 15 docs
 **Time to Build:** ~10 hours
 
-**Next Steps:**
-1. Add API keys (OpenAI, Google, Inngest)
-2. Test with 20 real examples
-3. Measure accuracy
-4. Iterate on prompts
-
 **Future Phases:**
 - Phase 0.4: Bulk import (whole blog articles)
 - Phase 0.5: Smart merging (duplicate detection)
