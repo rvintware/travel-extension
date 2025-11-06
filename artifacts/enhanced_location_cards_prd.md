@@ -29,12 +29,6 @@ This PRD defines enhancements to location cards that improve data quality, reduc
 2. **Authentic Content** - Replace generic AI summaries with actual tips from sources
 3. **Flexible Organization** - Same location can be in multiple trips with different schedules
 
-### Success Metrics
-- **Deduplication**: < 1% duplicate place_ids in production
-- **Content Quality**: 95%+ of locations have 1-3 actionable tips
-- **User Engagement**: 50%+ of locations linked to multiple trips
-- **Interaction Rate**: 30%+ users customize location names or times
-
 ---
 
 ## 🏗️ Feature 1: Intelligent Deduplication

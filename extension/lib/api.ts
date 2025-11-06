@@ -335,6 +335,26 @@ export async function deleteAllUserData(userId: string): Promise<boolean> {
   }
 }
 
+/**
+ * Export trip as formatted text file
+ * GET /api/trips/:id/export
+ */
+export async function exportTrip(tripId: string): Promise<{
+  exportText: string
+  filename: string
+}> {
+  console.log('[API] Exporting trip:', tripId)
+  
+  const response = await fetch(`${API_URL}/api/trips/${tripId}/export`)
+  const data = await handleResponse<{
+    exportText: string
+    filename: string
+  }>(response)
+  
+  console.log('[API] Export successful, filename:', data.filename)
+  return data
+}
+
 // Note: Country detection removed - we now always respect the user's default country setting
 // This ensures saves go to the country the user explicitly chose in settings
 
