@@ -16,6 +16,13 @@ A Chrome extension and backend system for capturing, organizing, and planning tr
 - **Flexible Management**: Move locations between days, add from library, remove vs delete
 - **Active Trip System**: Set a default trip for quick saves
 
+### 📤 Trip Export
+- **One-Click Export**: Download trip as structured text file
+- **Copy-Paste Ready**: Works seamlessly in Google Docs, Apple Notes, Notion
+- **Comprehensive Details**: Includes all locations, tips, sources, scheduling, and trip notes
+- **Professional Format**: Clean hierarchy with emojis, perfect for sharing with travel companions
+- **Customizable**: Format specification in `artifacts/features/trip-export/export-format-specification.md`
+
 ### ⚙️ Other Features
 - **Settings Panel**: Configure default country and default trip
 - **API Integration**: All data synced to Supabase backend
