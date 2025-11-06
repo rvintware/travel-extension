@@ -19,6 +19,7 @@ export function TripDetail({ trip, onBack }: TripDetailProps) {
   const [selectedDay, setSelectedDay] = useState<number | 'all' | 'unscheduled'>('all')
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
+  const [exporting, setExporting] = useState(false)
   const [confirmDialog, setConfirmDialog] = useState<{
     isOpen: boolean
     location: LocationWithTripData | null
@@ -194,6 +195,39 @@ export function TripDetail({ trip, onBack }: TripDetailProps) {
     }
   }
   
+  async function handleExport() {
+    setExporting(true)
+    try {
+      console.log('[Export] Starting export for trip:', trip.id)
+      
+      // Call API
+      const result = await api.exportTrip(trip.id)
+      
+      // Create blob
+      const blob = new Blob([result.exportText], { 
+        type: 'text/plain;charset=utf-8' 
+      })
+      const url = URL.createObjectURL(blob)
+      
+      // Trigger download
+      const a = document.createElement('a')
+      a.href = url
+      a.download = result.filename
+      document.body.appendChild(a)
+      a.click()
+      
+      // Cleanup
+      document.body.removeChild(a)
+      URL.revokeObjectURL(url)
+      
+      console.log('[Export] Success, file downloaded:', result.filename)
+    } catch (error) {
+      console.error('[Export] Failed:', error)
+    } finally {
+      setExporting(false)
+    }
+  }
+  
   return (
     <div className="flex flex-col h-full">
       {/* Header */}
@@ -236,6 +270,16 @@ export function TripDetail({ trip, onBack }: TripDetailProps) {
               >
                 <span>🗺️</span>
                 <span>Map View</span>
+              </button>
+              <span>·</span>
+              <button
+                onClick={handleExport}
+                disabled={exporting}
+                className="text-primary hover:text-primary-dark transition-colors flex items-center gap-1 font-medium disabled:opacity-50"
+                title="Export trip"
+              >
+                <span>📤</span>
+                <span>{exporting ? 'Exporting...' : 'Export'}</span>
               </button>
             </p>
           </div>
