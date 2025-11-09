@@ -72,3 +72,13 @@ export function generateId(): string {
   return crypto.randomUUID()
 }
 
+/**
+ * Mask API key for display
+ * Shows first 9 chars + last 3 chars
+ * Example: "sk-proj-abc...xyz"
+ */
+export function maskApiKey(key: string): string {
+  if (key.length <= 12) return '****'
+  return `${key.substring(0, 9)}****${key.substring(key.length - 3)}`
+}
+

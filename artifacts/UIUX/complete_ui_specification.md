@@ -361,10 +361,12 @@ CARD SPECIFICATIONS:
 
 ```
 ┌─────────────────────────────────────────┐
-│  ← Back (text-primary)            [⚙️] │ ← p-4, border-b
+│  ← Back (text-primary)            [🔄] │ ← p-4, border-b
 │                                         │
 │  Tokyo 2025 (text-lg, semibold)        │
-│  🇯🇵 3 days · Mar 20-27 · 12 locations │ ← text-sm, gray-600
+│  5 Countries · 12 locations            │ ← text-sm, gray-600
+│  🗺️ Map View                           │    (first line: gap-2)
+│                        📤 Export        │ ← (second line: right-aligned)
 │                                         │
 ├─────────────────────────────────────────┤
 │  Day Filters (bg-gray-50, py-2, px-4)  │
@@ -395,6 +397,18 @@ CARD SPECIFICATIONS:
 │  │ [Location Card]                   │ │
 │  └───────────────────────────────────┘ │
 └─────────────────────────────────────────┘
+
+HEADER METADATA:
+├─ Countries count: Dynamically calculated from unique country_id in locations
+├─ Display: "X Country" (singular) or "X Countries" (plural)
+├─ No country flag emoji shown
+├─ Layout: Stacked two-line design for better touch targets
+├─ First line: Country count · location count · Map View button
+├─ Second line: Export button (right-aligned with justify-end)
+├─ Text size: text-sm
+├─ Color: text-gray-600
+├─ Spacing: gap-2 between items, mt-1 for second line
+└─ Buttons: text-primary with hover:text-primary-dark
 
 DAY FILTER TABS:
 ├─ Inactive: bg-white, text-gray-700, border
@@ -1245,6 +1259,25 @@ Timing: linear
 - Added: "X countries" indicator
 - Logic: Countries come from `trip_countries` join table
 - Display: Shows count, not individual flags (cleaner)
+
+### Trip Detail View Updates
+
+**Header metadata layout:**
+```
+┌───────────────────────────────────┐
+│ Asia 2026                         │
+│ 5 Countries · 12 locations        │
+│ 🗺️ Map View                       │
+│                   📤 Export        │
+└───────────────────────────────────┘
+```
+
+**Changes from previous version:**
+- Removed: Country flag emoji
+- Removed: Duration and date range display
+- Added: Dynamic country count (calculated from unique countries in locations)
+- Layout: Stacked two-line action buttons for better UX
+- Countries count updates automatically when locations are added/removed
 
 ### Database Schema
 

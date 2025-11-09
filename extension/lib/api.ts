@@ -52,10 +52,23 @@ export async function saveLocation(data: {
   console.log('[API Client] Data keys:', Object.keys(data))
   console.log('[API Client] Has screenshot:', !!data.screenshot)
   
+  // BYOK: Get user's API key from settings
+  const settings = await chrome.storage.local.get(['useOwnApiKey', 'openaiApiKey'])
+  
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json'
+  }
+  
+  // Add user's API key if they opted in
+  if (settings.useOwnApiKey && settings.openaiApiKey) {
+    headers['X-User-OpenAI-Key'] = settings.openaiApiKey
+    console.log('[API Client] Including user API key')
+  }
+  
   try {
     const response = await fetch(`${API_URL}/api/locations`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers,
       body: JSON.stringify(data)
     })
     
@@ -333,6 +346,29 @@ export async function deleteAllUserData(userId: string): Promise<boolean> {
     console.error('[API Client] ❌ Delete failed:', error)
     throw error
   }
+}
+
+/**
+ * Validate OpenAI API key
+ * POST /api/validate-openai-key
+ */
+export async function validateOpenAIKey(apiKey: string): Promise<{
+  valid: boolean
+  error?: string
+  code?: string
+}> {
+  console.log('[API] Validating OpenAI key...')
+  
+  const response = await fetch(`${API_URL}/api/validate-openai-key`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ apiKey })
+  })
+  
+  const data = await response.json()
+  console.log('[API] Validation result:', data.valid ? 'Valid' : 'Invalid')
+  
+  return data
 }
 
 /**

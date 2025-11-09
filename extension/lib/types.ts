@@ -21,6 +21,8 @@ export interface Settings {
   defaultTripId?: string;
   defaultView: 'trips' | 'locations';
   rememberLastTab: boolean;
+  openaiApiKey?: string;  // BYOK: API key (stored locally)
+  useOwnApiKey?: boolean;  // BYOK: Toggle state
 }
 
 export interface Country {

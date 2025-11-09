@@ -83,6 +83,10 @@ export async function POST(request: Request) {
       console.log('[API] Screenshot size:', body.screenshot.length, 'chars')
       console.log('[API] Trip ID:', body.tripId || 'none')
       
+      // BYOK: Get user's API key from header (optional)
+      const userApiKey = request.headers.get('X-User-OpenAI-Key')
+      console.log('[API] Has user API key:', !!userApiKey)  // Don't log the actual key!
+      
       try {
         await inngest.send({
           name: 'location/created',
@@ -94,7 +98,8 @@ export async function POST(request: Request) {
             pageTitle: validated.pageTitle || 'Untitled',
             userId: validated.userId,      // For creating multiple locations
             countryId: validated.countryId, // For creating multiple locations
-            tripId: body.tripId || null     // For linking multiple to trip
+            tripId: body.tripId || null,    // For linking multiple to trip
+            userApiKey: userApiKey || null  // BYOK: User's OpenAI API key (optional)
           }
         })
         console.log('[API] ✅ Inngest event sent successfully!')

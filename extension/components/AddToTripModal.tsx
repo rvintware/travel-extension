@@ -80,7 +80,7 @@ export function AddToTripModal({ location, trips, onClose, onSuccess }: AddToTri
               >
                 {trips.map(trip => (
                   <option key={trip.id} value={trip.id}>
-                    {trip.country?.emoji} {trip.name}
+                    {trip.name}
                   </option>
                 ))}
               </select>

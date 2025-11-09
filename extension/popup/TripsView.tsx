@@ -57,7 +57,6 @@ export function TripsView({ trips, countries, onTripClick, onNewTrip }: TripsVie
           <div className="bg-primary-light border border-primary rounded-lg p-3">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-2">
-                <span className="text-xl">{activeTrip.country?.emoji || '🌐'}</span>
                 <span className="font-medium text-primary-dark">
                   {activeTrip.name}
                 </span>
