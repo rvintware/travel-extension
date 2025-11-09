@@ -83,9 +83,12 @@
 
 ```
 ┌─────────────────────────────────────────┐
-│  ← Tokyo 2025                      [⚙️] │
+│  ← Tokyo 2025                      [🔄] │
 ├─────────────────────────────────────────┤
-│  🇯🇵 3 days · Mar 20-27 · 12 locations  │
+│  Tokyo 2025                             │
+│  5 Countries · 12 locations             │
+│  🗺️ Map View                            │
+│                         📤 Export        │
 │                                         │
 │  ┌─────┬─────┬─────┬─────┬──────────┐ │
 │  │ All │ D1  │ D2  │ D3  │Unscheduled│ │
@@ -121,6 +124,13 @@
 │  └───────────────────────────────────┘ │
 └─────────────────────────────────────────┘
 ```
+
+**Header Updates:**
+- No country flag displayed
+- Countries count dynamically calculated from unique countries in trip locations
+- Cleaner, more scalable for multi-country trips
+- Stacked layout: Map View and Export on separate lines for better touch targets
+- Export button right-aligned on second line
 
 **Day Summary Formula:**
 ```

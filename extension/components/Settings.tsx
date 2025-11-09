@@ -242,7 +242,7 @@ export function Settings({ countries, trips, onBack, onSave }: SettingsProps) {
             <option value="">None (save to library only)</option>
             {trips.map(trip => (
               <option key={trip.id} value={trip.id}>
-                {trip.country?.emoji} {trip.name}
+                {trip.name}
               </option>
             ))}
           </select>

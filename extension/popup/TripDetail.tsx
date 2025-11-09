@@ -25,6 +25,12 @@ export function TripDetail({ trip, onBack }: TripDetailProps) {
     location: LocationWithTripData | null
   }>({ isOpen: false, location: null })
   
+  // Calculate unique countries count from locations
+  const uniqueCountriesCount = React.useMemo(() => {
+    const uniqueCountryIds = new Set(locations.map(loc => loc.country_id))
+    return uniqueCountryIds.size
+  }, [locations])
+  
   useEffect(() => {
     loadTripLocations()
   }, [trip.id])
@@ -250,19 +256,15 @@ export function TripDetail({ trip, onBack }: TripDetailProps) {
             <span className={refreshing ? 'animate-spin' : ''}>🔄</span>
           </button>
         </div>
-        <div className="flex items-center justify-between">
-          <div>
-            <h1 className="text-lg font-semibold text-gray-900">{trip.name}</h1>
-            <p className="text-sm text-gray-600 flex items-center gap-2">
-              <span>{trip.country?.emoji || '🌐'}</span>
-              {trip.duration_days && <span>{trip.duration_days} days</span>}
-              {trip.start_date && trip.end_date && (
-                <span>
-                  · {new Date(trip.start_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} - 
-                  {new Date(trip.end_date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
-                </span>
-              )}
-              <span>· {locations.length} {locations.length === 1 ? 'location' : 'locations'}</span>
+        <div>
+          <h1 className="text-lg font-semibold text-gray-900">{trip.name}</h1>
+          <div className="text-sm text-gray-600">
+            <div className="flex items-center gap-2">
+              <span>
+                {uniqueCountriesCount} {uniqueCountriesCount === 1 ? 'Country' : 'Countries'}
+              </span>
+              <span>·</span>
+              <span>{locations.length} {locations.length === 1 ? 'location' : 'locations'}</span>
               <span>·</span>
               <button
                 onClick={openMapPopup}
@@ -271,7 +273,8 @@ export function TripDetail({ trip, onBack }: TripDetailProps) {
                 <span>🗺️</span>
                 <span>Map View</span>
               </button>
-              <span>·</span>
+            </div>
+            <div className="flex items-center justify-end mt-1">
               <button
                 onClick={handleExport}
                 disabled={exporting}
@@ -281,7 +284,7 @@ export function TripDetail({ trip, onBack }: TripDetailProps) {
                 <span>📤</span>
                 <span>{exporting ? 'Exporting...' : 'Export'}</span>
               </button>
-            </p>
+            </div>
           </div>
         </div>
       </div>
