@@ -4,6 +4,7 @@ import { getSettings, saveSettings, getUserId } from '../lib/storage'
 import { Cache } from '../lib/cache'
 import { Button } from './Button'
 import { ConfirmDialog } from './ConfirmDialog'
+import { maskApiKey } from '../lib/utils'
 import * as api from '../lib/api'
 
 interface SettingsProps {
@@ -23,10 +24,34 @@ export function Settings({ countries, trips, onBack, onSave }: SettingsProps) {
   const [locationCount, setLocationCount] = useState(0)
   const [tripCount, setTripCount] = useState(0)
   
+  // BYOK state
+  const [useOwnApiKey, setUseOwnApiKey] = useState(false)
+  const [apiKey, setApiKey] = useState('')
+  const [maskedKey, setMaskedKey] = useState('')
+  const [validating, setValidating] = useState(false)
+  const [validationStatus, setValidationStatus] = useState<{
+    type: 'success' | 'error' | null
+    message: string
+  }>({ type: null, message: '' })
+  
   useEffect(() => {
     loadSettings()
     loadCounts()
+    loadApiKeySettings()
   }, [])
+  
+  async function loadApiKeySettings() {
+    const stored = await chrome.storage.local.get(['useOwnApiKey', 'openaiApiKey'])
+    
+    if (stored.useOwnApiKey && stored.openaiApiKey) {
+      setUseOwnApiKey(true)
+      setMaskedKey(maskApiKey(stored.openaiApiKey))
+      setValidationStatus({
+        type: 'success',
+        message: 'Valid API key'
+      })
+    }
+  }
   
   async function loadSettings() {
     const data = await getSettings()
@@ -107,6 +132,65 @@ export function Settings({ countries, trips, onBack, onSave }: SettingsProps) {
       console.error('Delete all failed:', error)
       alert('Failed to delete data. Please try again.')
       setIsDeleting(false)
+    }
+  }
+  
+  async function handleValidateKey() {
+    setValidating(true)
+    setValidationStatus({ type: null, message: '' })
+    
+    try {
+      // Client-side format check
+      if (!apiKey.startsWith('sk-')) {
+        setValidationStatus({
+          type: 'error',
+          message: 'Invalid API key format. OpenAI keys start with "sk-"'
+        })
+        setValidating(false)
+        return
+      }
+      
+      // Call validation endpoint
+      const result = await api.validateOpenAIKey(apiKey)
+      
+      if (result.valid) {
+        // Save plain text key
+        await chrome.storage.local.set({
+          openaiApiKey: apiKey,
+          useOwnApiKey: true
+        })
+        
+        setMaskedKey(maskApiKey(apiKey))
+        setApiKey('') // Clear plain text
+        setValidationStatus({
+          type: 'success',
+          message: 'Valid API key'
+        })
+      } else {
+        setValidationStatus({
+          type: 'error',
+          message: result.error || 'Invalid API key'
+        })
+      }
+    } catch (error) {
+      setValidationStatus({
+        type: 'error',
+        message: 'Validation failed. Check your connection.'
+      })
+    } finally {
+      setValidating(false)
+    }
+  }
+  
+  async function handleToggleChange(enabled: boolean) {
+    setUseOwnApiKey(enabled)
+    
+    if (!enabled) {
+      // Clear key from storage
+      await chrome.storage.local.remove(['openaiApiKey', 'useOwnApiKey'])
+      setApiKey('')
+      setMaskedKey('')
+      setValidationStatus({ type: null, message: '' })
     }
   }
   
@@ -204,6 +288,90 @@ export function Settings({ countries, trips, onBack, onSave }: SettingsProps) {
               <span className="text-sm text-gray-700">Remember last opened tab</span>
             </label>
           </div>
+        </div>
+        
+        {/* OpenAI API Configuration (BYOK) */}
+        <div className="border-t border-gray-200 pt-6 mt-6">
+          <h3 className="text-base font-semibold text-gray-900 mb-3">
+            OpenAI API Configuration
+          </h3>
+          
+          {/* Toggle */}
+          <div className="flex items-center justify-between mb-3">
+            <label className="text-sm font-medium text-gray-700">
+              Use my own OpenAI API key
+            </label>
+            <input
+              type="checkbox"
+              checked={useOwnApiKey}
+              onChange={(e) => handleToggleChange(e.target.checked)}
+              className="w-4 h-4"
+            />
+          </div>
+          
+          {/* Help text */}
+          <div className="text-xs text-gray-600 mb-4 p-3 bg-gray-50 rounded">
+            <p className="mb-2">
+              Optional: Provide your own API key to control costs. We never store 
+              your key on our servers.
+            </p>
+            <p className="mb-2">Estimated: ~$0.007 per location save</p>
+            <a
+              href="https://platform.openai.com/api-keys"
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-primary hover:text-primary-dark"
+            >
+              Get API key from OpenAI →
+            </a>
+          </div>
+          
+          {/* API Key Input */}
+          {useOwnApiKey && (
+            <>
+              <label className="block text-sm font-medium text-gray-700 mb-2">
+                OpenAI API Key
+              </label>
+              <input
+                type="password"
+                value={maskedKey || apiKey}
+                onChange={(e) => setApiKey(e.target.value)}
+                placeholder="sk-proj-..."
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg text-sm mb-3"
+                disabled={validating}
+              />
+              
+              {/* Validate Button */}
+              <button
+                onClick={handleValidateKey}
+                disabled={validating || !apiKey}
+                className="w-full px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary-dark disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+              >
+                {validating && <span className="animate-spin">🔄</span>}
+                <span>{validating ? 'Validating...' : 'Save & Validate'}</span>
+              </button>
+              
+              {/* Status */}
+              {validationStatus.type && (
+                <div className={`mt-3 text-sm ${validationStatus.type === 'success' ? 'text-green-600' : 'text-red-600'}`}>
+                  {validationStatus.type === 'success' ? '✅' : '❌'} {validationStatus.message}
+                </div>
+              )}
+              
+              {/* Privacy Notice */}
+              <div className="mt-4 p-3 bg-blue-50 border border-blue-200 rounded text-xs text-gray-700">
+                <div className="font-semibold mb-1">🔒 Privacy & Security</div>
+                <p className="mb-2">
+                  Your API key is stored locally on your device in Chrome's secure storage. 
+                  When you save a location, your key is sent to our backend ONLY during AI 
+                  processing and is immediately discarded after use.
+                </p>
+                <p>
+                  We never store your key in our database or logs.
+                </p>
+              </div>
+            </>
+          )}
         </div>
         
         {/* Danger Zone */}

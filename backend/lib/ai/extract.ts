@@ -7,13 +7,8 @@ import {
 } from './prompts'
 import { buildExtractTipsPrompt } from './prompts/extract-tips'
 
-if (!process.env.OPENAI_API_KEY) {
-  console.warn('OPENAI_API_KEY not set - AI extraction will fail')
-}
-
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY || 'dummy-key-for-build'
-})
+// OpenAI client is now created per-job (not global)
+// This allows using user-provided API keys or server key dynamically
 
 interface ExtractionResult {
   location_name: string
@@ -53,15 +48,16 @@ export async function extractFromScreenshot(
   screenshot: string,
   selectedText: string,
   url: string,
-  pageTitle: string
+  pageTitle: string,
+  openaiClient: OpenAI
 ): Promise<ExtractionResult> {
   console.log('[AI Screenshot] Extracting from screenshot...')
   console.log('[AI Screenshot] Selected text:', selectedText.substring(0, 100))
   console.log('[AI Screenshot] URL:', url)
   
   try {
-    const response = await openai.chat.completions.create({
-      model: 'gpt-4o',  // Vision-capable model
+    const response = await openaiClient.chat.completions.create({
+      model: 'gpt-4o-mini',  // Vision-capable model, cost-optimized
       messages: [{
         role: 'user',
         content: [
@@ -140,13 +136,14 @@ Output valid JSON only.`
  */
 export async function countLocations(
   screenshot: string,
-  selectedText: string
+  selectedText: string,
+  openaiClient: OpenAI
 ): Promise<number> {
   console.log('[AI Count] Counting locations...')
   
   try {
-    const response = await openai.chat.completions.create({
-      model: 'gpt-4o',
+    const response = await openaiClient.chat.completions.create({
+      model: 'gpt-4o-mini',
       messages: [{
         role: 'user',
         content: [
@@ -179,14 +176,15 @@ export async function extractMultipleLocations(
   screenshot: string,
   selectedText: string,
   url: string,
-  globalContext: GlobalContext | null = null
+  globalContext: GlobalContext | null,
+  openaiClient: OpenAI
 ): Promise<ExtractionResult[]> {
   console.log('[AI Multi] Extracting multiple locations...')
   console.log('[AI Multi] Has global context:', !!globalContext)
   
   try {
-    const response = await openai.chat.completions.create({
-      model: 'gpt-4o',
+    const response = await openaiClient.chat.completions.create({
+      model: 'gpt-4o-mini',
       messages: [{
         role: 'user',
         content: [
@@ -223,15 +221,16 @@ export async function extractLocationVariations(
   selectedText: string,
   url: string,
   pageTitle: string,
-  globalContext: GlobalContext | null = null
+  globalContext: GlobalContext | null,
+  openaiClient: OpenAI
 ): Promise<LocationVariation[]> {
   console.log('[AI Variations] Extracting 3 search queries...')
   console.log('[AI Variations] Selected text:', selectedText.substring(0, 100))
   console.log('[AI Variations] Has global context:', !!globalContext)
   
   try {
-    const response = await openai.chat.completions.create({
-      model: 'gpt-4o',
+    const response = await openaiClient.chat.completions.create({
+      model: 'gpt-4o-mini',
       messages: [{
         role: 'user',
         content: [
@@ -326,15 +325,16 @@ export async function extractGlobalContext(
   screenshot: string,
   selectedText: string,
   url: string,
-  pageTitle: string
+  pageTitle: string,
+  openaiClient: OpenAI
 ): Promise<GlobalContext | null> {
   console.log('[AI Context] Extracting global geographic context...')
   console.log('[AI Context] Text length:', selectedText.length)
   console.log('[AI Context] URL:', url)
   
   try {
-    const response = await openai.chat.completions.create({
-      model: 'gpt-4o',
+    const response = await openaiClient.chat.completions.create({
+      model: 'gpt-4o-mini',
       messages: [{
         role: 'user',
         content: [
@@ -388,7 +388,8 @@ interface TipExtractionResult {
 export async function extractTieredTips(
   screenshot: string,
   selectedText: string,
-  reviews: Array<{ rating: number; text: string }>
+  reviews: Array<{ rating: number; text: string }>,
+  openaiClient: OpenAI
 ): Promise<TipExtractionResult[]> {
   console.log('[AI Tips] Extracting tiered tips...')
   console.log('[AI Tips] Selected text:', selectedText.substring(0, 100))
@@ -397,8 +398,8 @@ export async function extractTieredTips(
   try {
     const prompt = buildExtractTipsPrompt(selectedText, reviews)
     
-    const response = await openai.chat.completions.create({
-      model: 'gpt-4o',  // Vision-capable
+    const response = await openaiClient.chat.completions.create({
+      model: 'gpt-4o-mini',  // Vision-capable
       messages: [{
         role: 'user',
         content: [

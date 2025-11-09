@@ -1,3 +1,4 @@
+import OpenAI from 'openai'
 import { inngest } from '../inngest'
 import { supabase } from '../supabase'
 import { extractFromScreenshot, countLocations, extractMultipleLocations, extractLocationVariations, extractGlobalContext, GlobalContext, extractTieredTips } from '../ai/extract'
@@ -28,11 +29,21 @@ export const processLocation = inngest.createFunction(
       pageTitle,
       userId,          // For creating multiple locations
       countryId,       // For creating multiple locations
-      tripId           // Optional: for linking to trip
+      tripId,          // Optional: for linking to trip
+      userApiKey       // NEW: Optional user-provided API key
     } = event.data
     
     console.log(`[Job] Processing location ${locationId}`)
     console.log(`[Job] Has tripId:`, !!tripId)
+    console.log(`[Job] Using user API key:`, !!userApiKey)  // Don't log the actual key!
+    
+    // Create OpenAI client for this job (uses user key or server key)
+    const apiKey = userApiKey || process.env.OPENAI_API_KEY
+    if (!apiKey) {
+      throw new Error('No API key available (neither user key nor server key configured)')
+    }
+    
+    const openaiClient = new OpenAI({ apiKey })
     
     // ==================== STEP 0: EXTRACT GLOBAL CONTEXT ====================
     const globalContext = await step.run('extract-global-context', async () => {
@@ -41,7 +52,7 @@ export const processLocation = inngest.createFunction(
         return null
       }
       
-      return await extractGlobalContext(screenshot, selectedText, url, pageTitle)
+      return await extractGlobalContext(screenshot, selectedText, url, pageTitle, openaiClient)
     })
     
     if (globalContext) {
@@ -63,7 +74,7 @@ export const processLocation = inngest.createFunction(
     
     // STEP 1: Count how many locations
     const count = await step.run('count-locations', async () => {
-      return await countLocations(screenshot, selectedText)
+      return await countLocations(screenshot, selectedText, openaiClient)
     })
     
     console.log(`[Job] Count: ${count} locations`)
@@ -95,7 +106,8 @@ export const processLocation = inngest.createFunction(
           selectedText, 
           url, 
           pageTitle,
-          globalContext  // 🔧 NEW: Pass global context
+          globalContext,  // 🔧 Pass global context
+          openaiClient    // Pass OpenAI client
         )
         
         console.log('[Job] ✅ Variations returned:', result.length)
@@ -217,7 +229,7 @@ export const processLocation = inngest.createFunction(
         }
         
         console.log('[Job] Extracting tiered tips...')
-        const tips = await extractTieredTips(screenshot, selectedText, reviews)
+        const tips = await extractTieredTips(screenshot, selectedText, reviews, openaiClient)
         console.log(`[Job] Extracted ${tips.length} tiered tips`)
         
         return tips
@@ -468,7 +480,8 @@ export const processLocation = inngest.createFunction(
           screenshot, 
           selectedText, 
           url,
-          globalContext  // NEW!
+          globalContext,  // Pass global context
+          openaiClient    // Pass OpenAI client
         )
         
         // Layer 2: Code deduplication (case-insensitive by normalized name)
