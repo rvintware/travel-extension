@@ -163,5 +163,49 @@ export class Cache {
       CACHE_KEYS.TRIPS_TIMESTAMP,
     ])
   }
+
+  /**
+   * Check if any locations have processing status (pending or processing)
+   * Used to determine if we should force fresh fetch even if cache is fresh
+   */
+  static hasProcessingLocations(locations: any[] | null): boolean {
+    if (!locations || !Array.isArray(locations)) {
+      return false
+    }
+    
+    return locations.some((loc: any) => 
+      loc.processing_status === 'pending' || loc.processing_status === 'processing'
+    )
+  }
+}
+
+/**
+ * Compare two arrays of objects by ID and content
+ * Returns true if arrays are identical (same IDs, same data)
+ * Used to prevent UI flicker when polling updates state with unchanged data
+ */
+export function arraysEqual<T extends { id: string }>(
+  a: T[], 
+  b: T[]
+): boolean {
+  if (a.length !== b.length) return false
+  
+  const aMap = new Map(a.map(item => [item.id, item]))
+  const bMap = new Map(b.map(item => [item.id, item]))
+  
+  // Check all IDs match
+  for (const id of aMap.keys()) {
+    if (!bMap.has(id)) return false
+  }
+  
+  // Check content matches (shallow comparison)
+  for (const [id, aItem] of aMap) {
+    const bItem = bMap.get(id)!
+    if (JSON.stringify(aItem) !== JSON.stringify(bItem)) {
+      return false
+    }
+  }
+  
+  return true
 }
 

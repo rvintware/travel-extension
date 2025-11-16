@@ -11,9 +11,13 @@ import { Cache } from '../lib/cache'
 interface TripDetailProps {
   trip: Trip
   onBack: () => void
+  onLocationMoved?: () => void
+  onLocationRemoved?: () => void
+  onLocationLinked?: () => void
+  onLocationUnscheduled?: () => void
 }
 
-export function TripDetail({ trip, onBack }: TripDetailProps) {
+export function TripDetail({ trip, onBack, onLocationMoved, onLocationRemoved, onLocationLinked, onLocationUnscheduled }: TripDetailProps) {
   const [locations, setLocations] = useState<LocationWithTripData[]>([])
   const [byDay, setByDay] = useState<Record<string | number, LocationWithTripData[]>>({})
   const [selectedDay, setSelectedDay] = useState<number | 'all' | 'unscheduled'>('all')
@@ -141,38 +145,110 @@ export function TripDetail({ trip, onBack }: TripDetailProps) {
       case 'move-to-day':
         // Move to specific day
         try {
-          await api.linkLocationToTrip({
+          // STEP 1: Perform API call (get backend response)
+          const result = await api.linkLocationToTrip({
             tripId: trip.id,
             locationId: location.id,
             dayNumber: data, // The day number
           })
           
-          // Invalidate caches
+          // STEP 2: OPTIMISTIC UPDATE - Update UI immediately (0ms blocking)
+          // Update locations array
+          setLocations(prev => prev.map(loc => 
+            loc.id === location.id
+              ? { ...loc, dayNumber: data }
+              : loc
+          ))
+          
+          // Update byDay grouping optimistically
+          setByDay(prev => {
+            const newByDay = { ...prev }
+            // Remove from old day/unscheduled
+            Object.keys(newByDay).forEach(day => {
+              if (newByDay[day]) {
+                newByDay[day] = newByDay[day].filter(l => l.id !== location.id)
+              }
+            })
+            // Add to new day
+            if (!newByDay[data]) {
+              newByDay[data] = []
+            }
+            newByDay[data] = [...newByDay[data], { ...location, dayNumber: data }]
+            return newByDay
+          })
+          
+          // STEP 3: Invalidate relevant caches
           await Cache.invalidateTrips()
           await Cache.invalidateLocations()
           
-          await loadTripLocations() // Refresh
+          // STEP 4: Notify parent via callback (instant, ~0ms)
+          onLocationMoved?.()
+          
+          // STEP 5: Background refresh to verify (non-blocking)
+          loadTripLocations().catch(error => {
+            // On error, revert optimistic update by refreshing from server
+            console.error('Refresh failed:', error)
+            loadTripLocations() // Get real state from server
+          })
         } catch (error) {
           console.error('Failed to move location:', error)
+          // On API error, refresh to get real state
+          loadTripLocations()
         }
         break
       
       case 'unschedule':
         // Move to unscheduled
         try {
-          await api.linkLocationToTrip({
+          // STEP 1: Perform API call (get backend response)
+          const result = await api.linkLocationToTrip({
             tripId: trip.id,
             locationId: location.id,
             dayNumber: undefined, // null = unscheduled
           })
           
-          // Invalidate caches
+          // STEP 2: OPTIMISTIC UPDATE - Update UI immediately (0ms blocking)
+          // Update locations array
+          setLocations(prev => prev.map(loc => 
+            loc.id === location.id
+              ? { ...loc, dayNumber: null }
+              : loc
+          ))
+          
+          // Update byDay grouping optimistically
+          setByDay(prev => {
+            const newByDay = { ...prev }
+            // Remove from old day
+            Object.keys(newByDay).forEach(day => {
+              if (newByDay[day]) {
+                newByDay[day] = newByDay[day].filter(l => l.id !== location.id)
+              }
+            })
+            // Add to unscheduled
+            if (!newByDay.unscheduled) {
+              newByDay.unscheduled = []
+            }
+            newByDay.unscheduled = [...newByDay.unscheduled, { ...location, dayNumber: null }]
+            return newByDay
+          })
+          
+          // STEP 3: Invalidate relevant caches
           await Cache.invalidateTrips()
           await Cache.invalidateLocations()
           
-          await loadTripLocations() // Refresh
+          // STEP 4: Notify parent via callback (instant, ~0ms)
+          onLocationUnscheduled?.()
+          
+          // STEP 5: Background refresh to verify (non-blocking)
+          loadTripLocations().catch(error => {
+            // On error, revert optimistic update by refreshing from server
+            console.error('Refresh failed:', error)
+            loadTripLocations() // Get real state from server
+          })
         } catch (error) {
           console.error('Failed to unschedule:', error)
+          // On API error, refresh to get real state
+          loadTripLocations()
         }
         break
       
@@ -186,17 +262,45 @@ export function TripDetail({ trip, onBack }: TripDetailProps) {
   async function handleConfirmRemove() {
     if (!confirmDialog.location) return
     
+    const locationToRemove = confirmDialog.location
+    
     try {
-      await api.removeFromTrip(trip.id, confirmDialog.location.id)
+      // STEP 1: Perform API call
+      await api.removeFromTrip(trip.id, locationToRemove.id)
       
-      // Invalidate caches (trip count changed)
+      // STEP 2: OPTIMISTIC UPDATE - Remove location immediately (0ms blocking)
+      setLocations(prev => prev.filter(loc => loc.id !== locationToRemove.id))
+      
+      // Update byDay grouping optimistically
+      setByDay(prev => {
+        const newByDay = { ...prev }
+        Object.keys(newByDay).forEach(day => {
+          if (newByDay[day]) {
+            newByDay[day] = newByDay[day].filter(l => l.id !== locationToRemove.id)
+          }
+        })
+        return newByDay
+      })
+      
+      // STEP 3: Invalidate caches (trip count changed)
       await Cache.invalidateTrips()
       await Cache.invalidateLocations()
       
-      await loadTripLocations() // Refresh
+      // STEP 4: Notify parent via callback (instant, ~0ms)
+      onLocationRemoved?.()
+      
+      // STEP 5: Background refresh to verify (non-blocking)
+      loadTripLocations().catch(error => {
+        // On error, revert optimistic update by refreshing from server
+        console.error('Refresh failed:', error)
+        loadTripLocations() // Get real state from server
+      })
+      
       setConfirmDialog({ isOpen: false, location: null })
     } catch (error) {
       console.error('Failed to remove from trip:', error)
+      // On API error, refresh to get real state
+      loadTripLocations()
       setConfirmDialog({ isOpen: false, location: null })
     }
   }

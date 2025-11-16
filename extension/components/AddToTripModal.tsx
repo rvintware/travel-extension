@@ -26,17 +26,22 @@ export function AddToTripModal({ location, trips, onClose, onSuccess }: AddToTri
     
     setLoading(true)
     try {
-      await api.linkLocationToTrip({
+      // STEP 1: Perform API call (get backend response)
+      const result = await api.linkLocationToTrip({
         tripId: selectedTripId,
         locationId: location.id,
         dayNumber: dayNumber || undefined,
       })
       
-      // Invalidate caches (trip count changed)
+      // STEP 2: Invalidate caches (trip count changed)
       await Cache.invalidateTrips()
       await Cache.invalidateLocations()
       
+      // STEP 3: Notify parent via callback (optimistic update handled in parent)
+      // Parent will optimistically update trips list
       onSuccess()
+      
+      // Background refresh handled by parent callback
     } catch (error) {
       console.error('Failed to add to trip:', error)
       if (error instanceof Error && error.message.includes('already in this trip')) {

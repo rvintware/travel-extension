@@ -1,5 +1,6 @@
 import { getUserId, getSettings, getDefaultTrip } from "../lib/storage"
 import * as api from "../lib/api"
+import { Cache } from "../lib/cache"
 
 // Context menu IDs
 const MENU_ID_TRIP = 'save-to-trip'
@@ -130,6 +131,19 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
     console.log('[BG] ✅ Location created:', location.id)
     console.log('[BG] Processing status:', location.processing_status)
     
+    // Update cache optimistically (DB is already updated via API response)
+    try {
+      const cached = await Cache.getLocations()
+      const updated = cached.data 
+        ? [...cached.data.filter(l => l.id !== location.id), location] // Replace if exists
+        : [location]
+      await Cache.setLocations(updated)
+      console.log('[BG] ✅ Cache updated with new location')
+    } catch (cacheError) {
+      // Cache update failed, but location is saved - popup will fetch fresh
+      console.warn('[BG] Cache update failed:', cacheError)
+    }
+    
     // If saving to trip, link it
     if (info.menuItemId === MENU_ID_TRIP && settings?.defaultTripId) {
       await api.linkLocationToTrip({
@@ -137,6 +151,10 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
         locationId: location.id,
         // Leave unscheduled (no dayNumber)
       })
+      
+      // Invalidate trips cache (location count changed)
+      await Cache.invalidateTrips()
+      // Note: Locations cache already updated above
       
       // Get trip name for toast with error handling
       let tripName = 'Trip'

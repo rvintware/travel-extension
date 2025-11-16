@@ -12,9 +12,10 @@ interface SettingsProps {
   trips: Trip[]
   onBack: () => void
   onSave: () => void
+  onDeleteAll?: () => void  // New optional callback
 }
 
-export function Settings({ countries, trips, onBack, onSave }: SettingsProps) {
+export function Settings({ countries, trips, onBack, onSave, onDeleteAll }: SettingsProps) {
   const [settings, setSettings] = useState<SettingsType | null>(null)
   const [popupBehavior, setPopupBehavior] = useState<'trips' | 'locations' | 'remember'>('trips')
   const [loading, setLoading] = useState(true)
@@ -118,16 +119,23 @@ export function Settings({ countries, trips, onBack, onSave }: SettingsProps) {
     setIsDeleting(true)
     try {
       const userId = await getUserId()
+      
+      // STEP 1: Perform API call
       await api.deleteAllUserData(userId)
       
-      // Clear local cache
+      // STEP 2: Clear local cache (already done, but keep for consistency)
       await Cache.clearAll()
       
-      // Close modal
+      // STEP 3: Close modal
       setShowDeleteConfirm(false)
       
-      // Reload popup
-      onSave()
+      // STEP 4: Notify parent via callback (handles optimistic update + refresh)
+      if (onDeleteAll) {
+        onDeleteAll()  // Parent handles state clearing and refresh
+      } else {
+        // Fallback: just navigate back (for backwards compatibility)
+        onSave()
+      }
     } catch (error) {
       console.error('Delete all failed:', error)
       alert('Failed to delete data. Please try again.')
