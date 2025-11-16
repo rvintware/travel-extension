@@ -73,6 +73,7 @@ export function CreateTripView({ countries, onBack, onSuccess }: CreateTripViewP
     try {
       const userId = await getUserId()
       
+      // STEP 1: Perform API call (get backend response)
       const trip = await api.createTrip({
         userId,
         name: name.trim(),
@@ -81,7 +82,11 @@ export function CreateTripView({ countries, onBack, onSuccess }: CreateTripViewP
         isActive: setAsActive
       })
       
+      // STEP 2: Notify parent via callback (optimistic update handled in parent)
+      // Parent will optimistically add trip to trips list
       onSuccess(trip)
+      
+      // Background refresh handled by parent callback
     } catch (error) {
       console.error('Create trip failed:', error)
       alert('Failed to create trip. Please try again.')

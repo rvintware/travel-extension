@@ -9,7 +9,7 @@ import { Settings } from "./components/Settings"
 import { AddToTripModal } from "./components/AddToTripModal"
 import type { Country, Trip, Location, ViewType } from "./lib/types"
 import { getUserId, getSettings } from "./lib/storage"
-import { Cache } from "./lib/cache"
+import { Cache, arraysEqual } from "./lib/cache"
 import * as api from "./lib/api"
 import "./style.css"
 
@@ -41,18 +41,41 @@ function IndexPopup() {
   useEffect(() => {
     const handleMessage = async (message: any) => {
       if (message.type === 'CAPTURES_UPDATED') {
+        // Background script saved a location via context menu
         // Invalidate caches (new location added, counts changed)
         await Cache.invalidateTrips()
         await Cache.invalidateLocations()
         
-        // Reload data
-        await loadDataWithCache()
+        // Background refresh (non-blocking)
+        loadDataWithCache().catch(error => {
+          console.error('Refresh failed:', error)
+        })
       }
     }
     
     chrome.runtime.onMessage.addListener(handleMessage)
     return () => chrome.runtime.onMessage.removeListener(handleMessage)
   }, [])
+  
+  // Poll for processing locations
+  useEffect(() => {
+    const hasPending = locations.some(l => 
+      l.processing_status === 'pending' || l.processing_status === 'processing'
+    )
+    
+    if (hasPending) {
+      console.log('[Popup] Polling for processing locations...')
+      const interval = setInterval(() => {
+        // Invalidate cache to force fresh fetch
+        Cache.invalidateLocations()
+        loadDataWithCache().catch(error => {
+          console.error('Polling refresh failed:', error)
+        })
+      }, 3000) // Poll every 3 seconds
+      
+      return () => clearInterval(interval)
+    }
+  }, [locations])
   
   async function loadDataWithCache() {
     try {
@@ -87,32 +110,41 @@ function IndexPopup() {
         setActiveTab(settings.defaultView)
       }
       
-      // STEP 3: If all caches are fresh, we're done!
-      if (cachedCountries.fresh && cachedTrips.fresh && cachedLocations.fresh) {
+      // STEP 3: Check for processing locations (force fresh fetch if found)
+      const hasProcessingLocations = Cache.hasProcessingLocations(cachedLocations.data)
+      
+      // STEP 4: If all caches are fresh AND no processing locations, we're done!
+      if (cachedCountries.fresh && cachedTrips.fresh && cachedLocations.fresh && !hasProcessingLocations) {
         return // All data is fresh, no need to fetch!
       }
       
-      // STEP 4: Fetch fresh data in background (only what's stale)
+      // STEP 5: Fetch fresh data in background (only what's stale OR if processing)
       const [countriesData, tripsData, locationsData] = await Promise.all([
         cachedCountries.fresh ? Promise.resolve(cachedCountries.data!) : api.getCountries(),
         cachedTrips.fresh ? Promise.resolve(cachedTrips.data!) : api.getTrips(userId),
-        cachedLocations.fresh ? Promise.resolve(cachedLocations.data!) : api.getLocations(userId)
+        (cachedLocations.fresh && !hasProcessingLocations) ? Promise.resolve(cachedLocations.data!) : api.getLocations(userId)
       ])
       
-      // STEP 5: Update UI with fresh data (seamless)
-      setCountries(countriesData)
-      setTrips(tripsData)
-      setLocations(locationsData)
+      // STEP 6: Update UI with fresh data (only if changed - prevent flicker)
+      if (!arraysEqual(countries, countriesData)) {
+        setCountries(countriesData)
+      }
+      if (!arraysEqual(trips, tripsData)) {
+        setTrips(tripsData)
+      }
+      if (!arraysEqual(locations, locationsData)) {
+        setLocations(locationsData)
+      }
       setLoading(false)
       
-      // STEP 6: Update cache (only what was fetched)
+      // STEP 7: Update cache (only what was fetched)
       if (!cachedCountries.fresh) {
         await Cache.setCountries(countriesData)
       }
       if (!cachedTrips.fresh) {
         await Cache.setTrips(tripsData)
       }
-      if (!cachedLocations.fresh) {
+      if (!cachedLocations.fresh || hasProcessingLocations) {
         await Cache.setLocations(locationsData)
       }
     } catch (error) {
@@ -187,14 +219,134 @@ function IndexPopup() {
     setShowAddToTripModal(true)
   }
   
+  // Callback handlers for optimistic updates
+  
+  function handleLocationMoved() {
+    // OPTIMISTIC UPDATE - Update trips list immediately
+    // Note: We don't know which trip's count changed, so we'll refresh in background
+    // The optimistic update in TripDetail already updated the trip detail view
+    setTrips(prev => prev.map(trip => {
+      // If this is the selected trip, increment location count optimistically
+      if (trip.id === selectedTrip?.id) {
+        return { ...trip, locationCount: (trip.locationCount || 0) + 0 } // Count doesn't change on move
+      }
+      return trip
+    }))
+    
+    // INVALIDATE CACHE - Force fresh fetch
+    Cache.invalidateTrips()
+    Cache.invalidateLocations()
+    
+    // Background refresh to verify (non-blocking)
+    loadDataWithCache().catch(error => {
+      console.error('Refresh failed:', error)
+      // Keep optimistic update, will refresh on next action
+    })
+  }
+  
+  function handleLocationRemoved() {
+    // OPTIMISTIC UPDATE - Decrement location count for selected trip
+    setTrips(prev => prev.map(trip => {
+      if (trip.id === selectedTrip?.id) {
+        return { ...trip, locationCount: Math.max(0, (trip.locationCount || 0) - 1) }
+      }
+      return trip
+    }))
+    
+    // INVALIDATE CACHE - Force fresh fetch
+    Cache.invalidateTrips()
+    Cache.invalidateLocations()
+    
+    // Background refresh to verify (non-blocking)
+    loadDataWithCache().catch(error => {
+      console.error('Refresh failed:', error)
+    })
+  }
+  
+  function handleLocationLinked() {
+    // INVALIDATE CACHE - Force fresh fetch
+    Cache.invalidateTrips()
+    Cache.invalidateLocations()
+    
+    // Background refresh to verify (non-blocking)
+    loadDataWithCache().catch(error => {
+      console.error('Refresh failed:', error)
+    })
+  }
+  
+  function handleLocationUnscheduled() {
+    // INVALIDATE CACHE - Force fresh fetch
+    Cache.invalidateTrips()
+    Cache.invalidateLocations()
+    
+    // Background refresh to verify (non-blocking)
+    loadDataWithCache().catch(error => {
+      console.error('Refresh failed:', error)
+    })
+  }
+  
+  function handleLocationDeleted(location: Location) {
+    // OPTIMISTIC UPDATE - Remove location from locations list immediately
+    setLocations(prev => prev.filter(loc => loc.id !== location.id))
+    
+    // Update locationsByCountry count
+    // Note: This is recalculated from locations array, so it will update automatically
+    
+    // INVALIDATE CACHE - Force fresh fetch
+    Cache.invalidateTrips()
+    Cache.invalidateLocations()
+    
+    // Background refresh to verify (non-blocking)
+    loadDataWithCache().catch(error => {
+      console.error('Refresh failed:', error)
+    })
+  }
+  
+  function handleTripCreated(trip: Trip) {
+    // OPTIMISTIC UPDATE - Add trip to trips list immediately
+    setTrips(prev => [...prev, trip])
+    
+    // INVALIDATE CACHE - Force fresh fetch
+    Cache.invalidateTrips()
+    
+    // Background refresh to verify (non-blocking)
+    loadDataWithCache().catch(error => {
+      console.error('Refresh failed:', error)
+    })
+  }
+  
   function handleAddToTripSuccess() {
     setShowAddToTripModal(false)
     setLocationToAdd(null)
-    loadDataWithCache() // Refresh data
+    
+    // INVALIDATE CACHE - Force fresh fetch
+    Cache.invalidateTrips()
+    Cache.invalidateLocations()
+    
+    // Background refresh to verify (non-blocking)
+    loadDataWithCache().catch(error => {
+      console.error('Refresh failed:', error)
+    })
   }
   
-  function handleDeleteLocation(location: Location) {
-    loadDataWithCache() // Refresh data
+  function handleDeleteAllComplete() {
+    // OPTIMISTIC UPDATE - Clear all data immediately (0ms blocking)
+    setTrips([])
+    setLocations([])
+    setCountries([]) // Clear countries too
+    
+    // INVALIDATE CACHE - Force fresh fetch (already done in Settings, but ensure consistency)
+    Cache.invalidateTrips()
+    Cache.invalidateLocations()
+    // Note: Cache.clearAll() already called in Settings, but this ensures consistency
+    
+    // Background refresh to verify (non-blocking)
+    loadDataWithCache().catch(error => {
+      console.error('Refresh failed:', error)
+    })
+    
+    // Navigate back to list view
+    handleBackFromSettings()
   }
   
   // Count locations by country
@@ -212,6 +364,7 @@ function IndexPopup() {
           trips={trips}
           onBack={handleBackFromSettings}
           onSave={handleBackFromSettings}
+          onDeleteAll={handleDeleteAllComplete}
         />
       )
     }
@@ -223,7 +376,7 @@ function IndexPopup() {
           onBack={() => setView('tripList')}
           onSuccess={(trip) => {
             setView('tripList')
-            loadDataWithCache() // Refresh
+            handleTripCreated(trip) // Optimistic update + background refresh
           }}
         />
       )
@@ -234,6 +387,10 @@ function IndexPopup() {
         <TripDetail
           trip={selectedTrip}
           onBack={handleBackToList}
+          onLocationMoved={handleLocationMoved}
+          onLocationRemoved={handleLocationRemoved}
+          onLocationLinked={handleLocationLinked}
+          onLocationUnscheduled={handleLocationUnscheduled}
         />
       )
     }
@@ -244,7 +401,7 @@ function IndexPopup() {
           country={selectedCountry}
           onBack={handleBackToList}
           onAddToTrip={handleAddToTrip}
-          onDelete={handleDeleteLocation}
+          onDelete={handleLocationDeleted}
         />
       )
     }

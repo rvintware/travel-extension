@@ -45,6 +45,19 @@ export function CountryDetail({ country, onBack, onAddToTrip, onDelete }: Countr
   
   async function loadLocations() {
     try {
+      // Load from cache first
+      const cached = await Cache.getLocations()
+      const hasProcessing = Cache.hasProcessingLocations(cached.data)
+      
+      // If cache is fresh AND no processing, use cached data (filtered by country)
+      if (cached.fresh && !hasProcessing && cached.data) {
+        const filtered = cached.data.filter(l => l.country_id === country.id)
+        setLocations(filtered)
+        setLoading(false)
+        return
+      }
+      
+      // Otherwise, fetch fresh data
       const userId = await getUserId()
       const data = await api.getLocations(userId, country.id)
       setLocations(data)
@@ -89,19 +102,34 @@ export function CountryDetail({ country, onBack, onAddToTrip, onDelete }: Countr
   async function handleConfirmDelete() {
     if (!confirmDialog.location) return
     
+    const locationToDelete = confirmDialog.location
+    
     try {
-      await api.deleteLocation(confirmDialog.location.id)
-      setLocations(prev => prev.filter(l => l.id !== confirmDialog.location!.id))
+      // STEP 1: Perform API call
+      await api.deleteLocation(locationToDelete.id)
       
-      // Invalidate caches (counts changed)
+      // STEP 2: OPTIMISTIC UPDATE - Remove location immediately (0ms blocking)
+      setLocations(prev => prev.filter(l => l.id !== locationToDelete.id))
+      
+      // STEP 3: Invalidate caches (counts changed)
       await Cache.invalidateTrips()
       await Cache.invalidateLocations()
       
-      onDelete(confirmDialog.location)
+      // STEP 4: Notify parent via callback (instant, ~0ms)
+      onDelete(locationToDelete)
+      
+      // STEP 5: Background refresh to verify (non-blocking)
+      loadLocations().catch(error => {
+        // On error, revert optimistic update by refreshing from server
+        console.error('Refresh failed:', error)
+        loadLocations() // Get real state from server
+      })
+      
       setConfirmDialog({ isOpen: false, location: null })
     } catch (error) {
       console.error('Failed to delete:', error)
-      // Could show an error toast here instead of alert
+      // On API error, refresh to get real state
+      loadLocations()
       setConfirmDialog({ isOpen: false, location: null })
     }
   }
