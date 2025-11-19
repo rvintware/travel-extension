@@ -67,6 +67,32 @@ export async function PATCH(
     // Validate input
     const validated = updateTripSchema.parse(body)
     
+    // Check if reducing duration
+    if (validated.durationDays !== undefined) {
+      const { data: currentTrip } = await supabase
+        .from('trips')
+        .select('duration_days')
+        .eq('id', id)
+        .single()
+      
+      if (currentTrip && currentTrip.duration_days && validated.durationDays < currentTrip.duration_days) {
+        // Check for locations on affected days
+        const { data: affectedLocations } = await supabase
+          .from('trip_locations')
+          .select('id')
+          .eq('trip_id', id)
+          .gt('day_number', validated.durationDays)
+        
+        if (affectedLocations && affectedLocations.length > 0) {
+          return NextResponse.json({
+            error: 'conflict',
+            message: `${affectedLocations.length} locations on days ${validated.durationDays + 1}+ will be unscheduled`,
+            affectedCount: affectedLocations.length
+          }, { status: 409 })
+        }
+      }
+    }
+    
     // Build update object with snake_case keys
     const updateData: Record<string, any> = {}
     

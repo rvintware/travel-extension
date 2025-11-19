@@ -1,8 +1,15 @@
 import React, { useState, useEffect } from 'react'
 import type { Country, Trip } from '../lib/types'
 import { Button } from '../components/Button'
+import { DatePickerField } from '../components/DatePickerField'
 import { getUserId } from '../lib/storage'
 import * as api from '../lib/api'
+import { 
+  calculateDuration, 
+  calculateEndDate, 
+  calculateStartDate, 
+  formatDateForAPI 
+} from '../lib/dateUtils'
 
 interface CreateTripViewProps {
   countries: Country[]
@@ -12,57 +19,62 @@ interface CreateTripViewProps {
 
 export function CreateTripView({ countries, onBack, onSuccess }: CreateTripViewProps) {
   const [name, setName] = useState('')
-  const [selectedCountries, setSelectedCountries] = useState<string[]>([])
-  const [duration, setDuration] = useState('')
+  const [duration, setDuration] = useState('5') // Default 5 days
   const [setAsActive, setSetAsActive] = useState(true)
   const [creating, setCreating] = useState(false)
-  const [availableCountries, setAvailableCountries] = useState<Country[]>([])
-  const [loading, setLoading] = useState(true)
-  const [refreshing, setRefreshing] = useState(false)
+  
+  // Date state
+  const [startDate, setStartDate] = useState<Date | null>(null)
+  const [endDate, setEndDate] = useState<Date | null>(null)
+  const [isDurationLocked, setIsDurationLocked] = useState(false)
   
   const canCreate = name.trim().length > 0
   
+  // Auto-calculate duration when dates change
   useEffect(() => {
-    loadAvailableCountries()
-  }, [])
-  
-  async function loadAvailableCountries() {
-    console.log('[CreateTripView] Loading available countries...')
-    setLoading(true)
-    try {
-      const userId = await getUserId()
-      const locations = await api.getLocations(userId)
-      
-      const usedCountryIds = [...new Set(
-        locations.map(loc => loc.country_id).filter(Boolean)
-      )]
-      
-      const available = countries.filter(c => usedCountryIds.includes(c.id))
-      
-      console.log('[CreateTripView] Available:', available.length, 'countries')
-      setAvailableCountries(available)
-    } catch (error) {
-      console.error('[CreateTripView] Failed:', error)
-      setAvailableCountries([])
-    } finally {
-      setLoading(false)
-    }
-  }
-  
-  async function handleRefresh() {
-    setRefreshing(true)
-    try {
-      await loadAvailableCountries()
-    } finally {
-      setRefreshing(false)
-    }
-  }
-  
-  function toggleCountry(countryId: string) {
-    if (selectedCountries.includes(countryId)) {
-      setSelectedCountries(prev => prev.filter(id => id !== countryId))
+    if (startDate && endDate) {
+      const calculated = calculateDuration(startDate, endDate)
+      setDuration(calculated.toString())
+      setIsDurationLocked(true)
     } else {
-      setSelectedCountries(prev => [...prev, countryId])
+      setIsDurationLocked(false)
+    }
+  }, [startDate, endDate])
+  
+  // Auto-calculate end date when start + duration change (only when duration is unlocked)
+  useEffect(() => {
+    if (startDate && duration && !isDurationLocked) {
+      const durationNum = parseInt(duration)
+      if (!isNaN(durationNum) && durationNum > 0) {
+        const calculated = calculateEndDate(startDate, durationNum)
+        setEndDate(calculated)
+      }
+    }
+  }, [startDate, duration, isDurationLocked])
+  
+  // Auto-calculate start date when end + duration change
+  useEffect(() => {
+    if (endDate && duration && !startDate && !isDurationLocked) {
+      const durationNum = parseInt(duration)
+      if (!isNaN(durationNum) && durationNum > 0) {
+        const calculated = calculateStartDate(endDate, durationNum)
+        setStartDate(calculated)
+      }
+    }
+  }, [endDate, duration, startDate, isDurationLocked])
+  
+  function handleDurationChange(value: string) {
+    setDuration(value)
+    // Unlock if user manually edits
+    if (isDurationLocked) {
+      setIsDurationLocked(false)
+      // Recalculate end date if start date exists
+      if (startDate && value) {
+        const durationNum = parseInt(value)
+        if (!isNaN(durationNum) && durationNum > 0) {
+          setEndDate(calculateEndDate(startDate, durationNum))
+        }
+      }
     }
   }
   
@@ -77,7 +89,9 @@ export function CreateTripView({ countries, onBack, onSuccess }: CreateTripViewP
       const trip = await api.createTrip({
         userId,
         name: name.trim(),
-        countryIds: selectedCountries,
+        countryIds: [], // Countries determined automatically from locations
+        startDate: startDate ? formatDateForAPI(startDate) : undefined,
+        endDate: endDate ? formatDateForAPI(endDate) : undefined,
         durationDays: duration ? parseInt(duration) : undefined,
         isActive: setAsActive
       })
@@ -108,20 +122,12 @@ export function CreateTripView({ countries, onBack, onSuccess }: CreateTripViewP
             <span className="font-medium">Back</span>
           </button>
           
-          <button 
-            onClick={handleRefresh}
-            className="text-gray-600 hover:text-primary transition-colors"
-            disabled={refreshing}
-            title="Refresh"
-          >
-            <span className={refreshing ? 'animate-spin' : ''}>🔄</span>
-          </button>
         </div>
         <h1 className="text-lg font-semibold text-gray-900">Create Trip</h1>
       </div>
       
       {/* Content */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-4">
+      <div className="flex-1 overflow-y-auto p-4 space-y-6">
         {/* Trip Name */}
         <div>
           <label className="block text-sm font-semibold text-gray-900 mb-2">
@@ -141,73 +147,53 @@ export function CreateTripView({ countries, onBack, onSuccess }: CreateTripViewP
           </p>
         </div>
         
-        {/* Countries */}
-        <div>
-          <label className="block text-sm font-semibold text-gray-900 mb-2">
-            Countries (optional)
-          </label>
-          <p className="text-xs text-gray-500 mb-2">
-            {availableCountries.length > 0 
-              ? 'Select countries to include' 
-              : 'Save locations first, then select countries'}
-          </p>
-          
-          {loading ? (
-            <div className="text-center py-4 text-sm text-gray-500">
-              Loading countries...
-            </div>
-          ) : availableCountries.length === 0 ? (
-            <div className="text-center py-6 px-4 bg-gray-50 rounded-lg border border-gray-200">
-              <div className="text-3xl mb-2">📍</div>
-              <p className="text-sm text-gray-600 mb-1">
-                No locations saved yet
-              </p>
-              <p className="text-xs text-gray-500">
-                Save some locations first, then they'll appear here!
-              </p>
-            </div>
-          ) : (
-            <div className="border border-gray-300 rounded-lg p-2 max-h-60 overflow-y-auto bg-white">
-              {availableCountries.map(country => {
-                const isSelected = selectedCountries.includes(country.id)
-                return (
-                  <label 
-                    key={country.id}
-                    className={`
-                      flex items-center gap-2 px-3 py-2 rounded cursor-pointer transition-colors
-                      ${isSelected ? 'bg-primary-light' : 'hover:bg-gray-100'}
-                    `}
-                  >
-                    <input
-                      type="checkbox"
-                      checked={isSelected}
-                      onChange={() => toggleCountry(country.id)}
-                      className="text-primary focus:ring-primary"
-                    />
-                    <span className="text-2xl">{country.emoji || '🌐'}</span>
-                    <span className="text-sm text-gray-700">{country.name}</span>
-                  </label>
-                )
-              })}
-            </div>
-          )}
-        </div>
-        
-        {/* Duration */}
-        <div>
-          <label className="block text-sm font-semibold text-gray-900 mb-2">
-            Duration (optional)
-          </label>
-          <div className="flex items-center gap-2">
-            <input
-              type="number"
-              value={duration}
-              onChange={(e) => setDuration(e.target.value)}
-              placeholder="7"
-              min="1"
-              className="w-20 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary"
+        {/* Date Section */}
+        <div className="border border-gray-200 rounded-lg p-4 space-y-4">
+          <div className="grid grid-cols-2 gap-4">
+            <DatePickerField
+              label="Start Date"
+              selected={startDate}
+              onChange={setStartDate}
+              maxDate={endDate || undefined}
             />
-            <span className="text-sm text-gray-600">days</span>
+            <DatePickerField
+              label="End Date"
+              selected={endDate}
+              onChange={setEndDate}
+              minDate={startDate || undefined}
+            />
+          </div>
+          
+          {/* Duration Field */}
+          <div>
+            <label className="block text-sm font-semibold text-gray-900 mb-2">
+              Duration
+            </label>
+            <div className="flex items-center gap-2">
+              <div className="relative">
+                <input
+                  type="number"
+                  value={duration}
+                  onChange={(e) => handleDurationChange(e.target.value)}
+                  placeholder="5"
+                  min="1"
+                  className={`w-24 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary ${
+                    isDurationLocked ? 'bg-gray-100' : ''
+                  }`}
+                />
+                {isDurationLocked && (
+                  <span className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-600">
+                    🔒
+                  </span>
+                )}
+              </div>
+              <span className="text-sm text-gray-600">days</span>
+            </div>
+            {isDurationLocked && (
+              <p className="text-xs text-gray-500 mt-1">
+                Click to unlock and adjust
+              </p>
+            )}
           </div>
         </div>
         
