@@ -4,6 +4,7 @@ import { LocationCard } from '../components/LocationCard'
 import { DayFilter } from '../components/DayFilter'
 import { TimeEstimate } from '../components/TimeEstimate'
 import { ConfirmDialog } from '../components/ConfirmDialog'
+import { TripSettingsModal } from '../components/TripSettingsModal'
 import type { GearAction } from '../components/GearMenu'
 import * as api from '../lib/api'
 import { Cache } from '../lib/cache'
@@ -15,9 +16,10 @@ interface TripDetailProps {
   onLocationRemoved?: () => void
   onLocationLinked?: () => void
   onLocationUnscheduled?: () => void
+  onTripUpdated?: (trip: Trip) => void  // Callback when trip is updated
 }
 
-export function TripDetail({ trip, onBack, onLocationMoved, onLocationRemoved, onLocationLinked, onLocationUnscheduled }: TripDetailProps) {
+export function TripDetail({ trip, onBack, onLocationMoved, onLocationRemoved, onLocationLinked, onLocationUnscheduled, onTripUpdated }: TripDetailProps) {
   const [locations, setLocations] = useState<LocationWithTripData[]>([])
   const [byDay, setByDay] = useState<Record<string | number, LocationWithTripData[]>>({})
   const [selectedDay, setSelectedDay] = useState<number | 'all' | 'unscheduled'>('all')
@@ -28,6 +30,8 @@ export function TripDetail({ trip, onBack, onLocationMoved, onLocationRemoved, o
     isOpen: boolean
     location: LocationWithTripData | null
   }>({ isOpen: false, location: null })
+  const [settingsOpen, setSettingsOpen] = useState(false)
+  const [currentTrip, setCurrentTrip] = useState<Trip>(trip)
   
   // Calculate unique countries count from locations
   const uniqueCountriesCount = React.useMemo(() => {
@@ -36,8 +40,12 @@ export function TripDetail({ trip, onBack, onLocationMoved, onLocationRemoved, o
   }, [locations])
   
   useEffect(() => {
+    setCurrentTrip(trip)
+  }, [trip])
+  
+  useEffect(() => {
     loadTripLocations()
-  }, [trip.id])
+  }, [currentTrip.id])
   
   // Poll for processing locations
   useEffect(() => {
@@ -57,7 +65,7 @@ export function TripDetail({ trip, onBack, onLocationMoved, onLocationRemoved, o
   
   async function loadTripLocations() {
     try {
-      const data = await api.getTripLocations(trip.id)
+      const data = await api.getTripLocations(currentTrip.id)
       setLocations(data.locations)
       setByDay(data.byDay)
     } catch (error) {
@@ -67,10 +75,26 @@ export function TripDetail({ trip, onBack, onLocationMoved, onLocationRemoved, o
     }
   }
   
+  async function refreshTripData() {
+    try {
+      const freshTrip = await api.getTrip(currentTrip.id)
+      setCurrentTrip(freshTrip)
+      return freshTrip
+    } catch (error) {
+      console.error('Failed to refresh trip data:', error)
+      // Return current trip as fallback
+      return currentTrip
+    }
+  }
+  
   async function handleRefresh() {
     setRefreshing(true)
     try {
-      const data = await api.getTripLocations(trip.id)
+      // Refresh trip data
+      const refreshedTrip = await api.getTrip(currentTrip.id)
+      setCurrentTrip(refreshedTrip)
+      // Refresh locations
+      const data = await api.getTripLocations(currentTrip.id)
       setLocations(data.locations)
       setByDay(data.byDay)
     } finally {
@@ -129,7 +153,7 @@ export function TripDetail({ trip, onBack, onLocationMoved, onLocationRemoved, o
     // Open in browser tab instead of popup window to avoid MV3 CSP restrictions
     chrome.tabs.create({
       url: chrome.runtime.getURL(
-        `tabs/map.html?tripId=${trip.id}&apiKey=${encodeURIComponent(apiKey)}`
+        `tabs/map.html?tripId=${currentTrip.id}&apiKey=${encodeURIComponent(apiKey)}`
       ),
       active: true, // Focus the new tab
     })
@@ -147,7 +171,7 @@ export function TripDetail({ trip, onBack, onLocationMoved, onLocationRemoved, o
         try {
           // STEP 1: Perform API call (get backend response)
           const result = await api.linkLocationToTrip({
-            tripId: trip.id,
+            tripId: currentTrip.id,
             locationId: location.id,
             dayNumber: data, // The day number
           })
@@ -202,7 +226,7 @@ export function TripDetail({ trip, onBack, onLocationMoved, onLocationRemoved, o
         try {
           // STEP 1: Perform API call (get backend response)
           const result = await api.linkLocationToTrip({
-            tripId: trip.id,
+            tripId: currentTrip.id,
             locationId: location.id,
             dayNumber: undefined, // null = unscheduled
           })
@@ -266,7 +290,7 @@ export function TripDetail({ trip, onBack, onLocationMoved, onLocationRemoved, o
     
     try {
       // STEP 1: Perform API call
-      await api.removeFromTrip(trip.id, locationToRemove.id)
+      await api.removeFromTrip(currentTrip.id, locationToRemove.id)
       
       // STEP 2: OPTIMISTIC UPDATE - Remove location immediately (0ms blocking)
       setLocations(prev => prev.filter(loc => loc.id !== locationToRemove.id))
@@ -308,10 +332,10 @@ export function TripDetail({ trip, onBack, onLocationMoved, onLocationRemoved, o
   async function handleExport() {
     setExporting(true)
     try {
-      console.log('[Export] Starting export for trip:', trip.id)
+      console.log('[Export] Starting export for trip:', currentTrip.id)
       
       // Call API
-      const result = await api.exportTrip(trip.id)
+      const result = await api.exportTrip(currentTrip.id)
       
       // Create blob
       const blob = new Blob([result.exportText], { 
@@ -338,6 +362,20 @@ export function TripDetail({ trip, onBack, onLocationMoved, onLocationRemoved, o
     }
   }
   
+  async function handleSettingsSuccess(updatedTrip: Trip) {
+    // Update local trip state with returned data (optimistic)
+    setCurrentTrip(updatedTrip)
+    
+    // Refresh trip locations
+    loadTripLocations()
+    
+    // Fetch fresh trip data from server to ensure consistency
+    const freshTrip = await refreshTripData()
+    
+    // Notify parent component to update its state
+    onTripUpdated?.(freshTrip)
+  }
+  
   return (
     <div className="flex flex-col h-full">
       {/* Header */}
@@ -351,17 +389,26 @@ export function TripDetail({ trip, onBack, onLocationMoved, onLocationRemoved, o
             <span className="font-medium">Back</span>
           </button>
           
-          <button 
-            onClick={handleRefresh}
-            className="text-gray-600 hover:text-primary transition-colors"
-            disabled={refreshing}
-            title="Refresh"
-          >
-            <span className={refreshing ? 'animate-spin' : ''}>🔄</span>
-          </button>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setSettingsOpen(true)}
+              className="text-xl text-gray-600 hover:text-primary transition-colors"
+              title="Edit trip"
+            >
+              ✏️
+            </button>
+            <button 
+              onClick={handleRefresh}
+              className="text-gray-600 hover:text-primary transition-colors"
+              disabled={refreshing}
+              title="Refresh"
+            >
+              <span className={refreshing ? 'animate-spin' : ''}>🔄</span>
+            </button>
+          </div>
         </div>
         <div>
-          <h1 className="text-lg font-semibold text-gray-900">{trip.name}</h1>
+          <h1 className="text-lg font-semibold text-gray-900">{currentTrip.name}</h1>
           <div className="text-sm text-gray-600">
             <div className="flex items-center gap-2">
               <span>
@@ -378,6 +425,12 @@ export function TripDetail({ trip, onBack, onLocationMoved, onLocationRemoved, o
                 <span>Map View</span>
               </button>
             </div>
+            {/* Display trip dates if available */}
+            {currentTrip.start_date && currentTrip.end_date && (
+              <div className="text-sm text-gray-600 mt-1">
+                {new Date(currentTrip.start_date).toLocaleDateString('en-US', { day: 'numeric', month: 'short' })} - {new Date(currentTrip.end_date).toLocaleDateString('en-US', { day: 'numeric', month: 'short' })}
+              </div>
+            )}
             <div className="flex items-center justify-end mt-1">
               <button
                 onClick={handleExport}
@@ -456,6 +509,14 @@ export function TripDetail({ trip, onBack, onLocationMoved, onLocationRemoved, o
         confirmVariant="danger"
         onConfirm={handleConfirmRemove}
         onCancel={() => setConfirmDialog({ isOpen: false, location: null })}
+      />
+      
+      {/* Settings Modal */}
+      <TripSettingsModal
+        isOpen={settingsOpen}
+        trip={currentTrip}
+        onClose={() => setSettingsOpen(false)}
+        onSuccess={handleSettingsSuccess}
       />
     </div>
   )

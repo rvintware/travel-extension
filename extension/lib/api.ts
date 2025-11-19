@@ -1,6 +1,6 @@
 // API client for backend communication
 
-const API_URL = process.env.PLASMO_PUBLIC_API_URL || 'http://localhost:3000'
+export const API_URL = process.env.PLASMO_PUBLIC_API_URL || 'http://localhost:3000'
 
 // Types matching backend responses
 interface ApiResponse<T> {
@@ -152,6 +152,8 @@ export async function createTrip(data: {
   userId: string
   name: string
   countryIds: string[]  // Array of country IDs
+  startDate?: string  // ISO date string (YYYY-MM-DD)
+  endDate?: string    // ISO date string (YYYY-MM-DD)
   durationDays?: number
   isActive?: boolean
   description?: string
@@ -391,6 +393,34 @@ export async function exportTrip(tripId: string): Promise<{
   return data
 }
 
+/**
+ * Unschedule locations on days beyond the new duration
+ * POST /api/trips/:id/unschedule-days
+ */
+export async function unscheduleDays(tripId: string, newDuration: number): Promise<{
+  unscheduledCount: number
+  unscheduledLocationIds: string[]
+}> {
+  console.log('[API] Unscheduling days beyond', newDuration, 'for trip:', tripId)
+  
+  const response = await fetch(
+    `${API_URL}/api/trips/${tripId}/unschedule-days`,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ newDuration })
+    }
+  )
+  const data = await handleResponse<{
+    unscheduledCount: number
+    unscheduledLocationIds: string[]
+  }>(response)
+  
+  console.log('[API] Unscheduled', data.unscheduledCount, 'locations')
+  return data
+}
+
 // Note: Country detection removed - we now always respect the user's default country setting
 // This ensures saves go to the country the user explicitly chose in settings
+
 

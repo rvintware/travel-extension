@@ -315,6 +315,26 @@ function IndexPopup() {
     })
   }
   
+  function handleTripUpdated(updatedTrip: Trip) {
+    // Update trips array with fresh trip data
+    setTrips(prev => prev.map(t => 
+      t.id === updatedTrip.id ? updatedTrip : t
+    ))
+    
+    // Update selectedTrip if it's the same trip
+    if (selectedTrip?.id === updatedTrip.id) {
+      setSelectedTrip(updatedTrip)
+    }
+    
+    // Invalidate cache to ensure consistency
+    Cache.invalidateTrips()
+    
+    // Optional: Background refresh to verify (non-blocking)
+    loadDataWithCache().catch(error => {
+      console.error('Background refresh failed:', error)
+    })
+  }
+  
   function handleAddToTripSuccess() {
     setShowAddToTripModal(false)
     setLocationToAdd(null)
@@ -391,6 +411,7 @@ function IndexPopup() {
           onLocationRemoved={handleLocationRemoved}
           onLocationLinked={handleLocationLinked}
           onLocationUnscheduled={handleLocationUnscheduled}
+          onTripUpdated={handleTripUpdated}
         />
       )
     }

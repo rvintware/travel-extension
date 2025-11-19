@@ -7,7 +7,7 @@ import { handleError, badRequest } from '@/lib/errors'
  * Create a new trip
  * POST /api/trips
  * 
- * Body: { userId, countryId, name, description?, startDate?, endDate?, durationDays? }
+ * Body: { userId, countryId, name, description?, startDate?, endDate?, durationDays?, isActive? }
  */
 export async function POST(request: Request) {
   try {
@@ -16,7 +16,7 @@ export async function POST(request: Request) {
     console.log('[API] Creating trip with countries:', body.countryIds?.length || 0)
     
     // Validate
-    const { userId, name, countryIds, durationDays, isActive, description } = body
+    const { userId, name, countryIds, durationDays, isActive, description, startDate, endDate } = body
     
     // countryIds must be an array, but can be empty
     if (!Array.isArray(countryIds)) {
@@ -39,6 +39,8 @@ export async function POST(request: Request) {
         country_id: countryIds.length > 0 ? countryIds[0] : null,  // Nullable
         name,
         description,
+        start_date: startDate || null,  // Save start date if provided
+        end_date: endDate || null,      // Save end date if provided
         duration_days: durationDays,
         is_itinerary: false,
         is_active: isActive || false,

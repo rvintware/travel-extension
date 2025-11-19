@@ -25,23 +25,53 @@ export const updateLocationSchema = z.object({
 // Trip validation schemas
 export const createTripSchema = z.object({
   userId: z.string().uuid('Invalid user ID format'),
-  countryId: z.string().uuid('Invalid country ID format'),
+  countryId: z.string().uuid('Invalid country ID format').nullable().optional(),
   name: z.string().min(1, 'Name is required').max(255, 'Name too long'),
   description: z.string().optional(),
-  startDate: z.string().date().optional(),
-  endDate: z.string().date().optional(),
-  durationDays: z.number().int().min(1).optional(),
-})
+  startDate: z.string().optional().refine(
+    (val) => !val || !isNaN(Date.parse(val)),
+    { message: "Invalid start date" }
+  ),
+  endDate: z.string().optional().refine(
+    (val) => !val || !isNaN(Date.parse(val)),
+    { message: "Invalid end date" }
+  ),
+  durationDays: z.number().int().min(1).nullable().optional(),
+}).refine(
+  (data) => {
+    // Validate: start_date <= end_date
+    if (data.startDate && data.endDate) {
+      return new Date(data.startDate) <= new Date(data.endDate)
+    }
+    return true
+  },
+  { message: "Start date must be before or equal to end date" }
+)
 
 export const updateTripSchema = z.object({
   name: z.string().min(1).max(255).optional(),
   description: z.string().optional(),
-  startDate: z.string().date().optional(),
-  endDate: z.string().date().optional(),
-  durationDays: z.number().int().min(1).optional(),
+  startDate: z.string().optional().refine(
+    (val) => !val || !isNaN(Date.parse(val)),
+    { message: "Invalid start date" }
+  ),
+  endDate: z.string().optional().refine(
+    (val) => !val || !isNaN(Date.parse(val)),
+    { message: "Invalid end date" }
+  ),
+  durationDays: z.number().int().min(1).nullable().optional(),
   isActive: z.boolean().optional(),
   isArchived: z.boolean().optional(),
-})
+}).refine(
+  (data) => {
+    // Validate: start_date <= end_date
+    if (data.startDate && data.endDate) {
+      return new Date(data.startDate) <= new Date(data.endDate)
+    }
+    return true
+  },
+  { message: "Start date must be before or equal to end date" }
+)
 
 // Trip location linking validation schema
 export const linkLocationToTripSchema = z.object({
