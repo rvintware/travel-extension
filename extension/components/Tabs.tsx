@@ -22,7 +22,6 @@ export function Tabs({ active, onChange, onRefresh, onSettingsClick }: TabsProps
           `}
         >
           My Locations
-          {active === 'locations' && <span className="ml-1">⭐</span>}
         </button>
         
         <button
@@ -36,7 +35,6 @@ export function Tabs({ active, onChange, onRefresh, onSettingsClick }: TabsProps
           `}
         >
           My Trips
-          {active === 'trips' && <span className="ml-1">⭐</span>}
         </button>
       </div>
       

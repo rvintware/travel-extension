@@ -7,7 +7,7 @@ interface AddToTripModalProps {
   location: Location
   trips: Trip[]
   onClose: () => void
-  onSuccess: (tripName: string, location: Location) => void
+  onSuccess: (tripId: string, tripName: string, location: Location) => void
   onAlreadyInTrip: (tripName: string) => void
 }
 
@@ -38,7 +38,7 @@ export function AddToTripModal({ location, trips, onClose, onSuccess, onAlreadyI
       // Use requestAnimationFrame to ensure React processes the close state update first
       requestAnimationFrame(() => {
         requestAnimationFrame(() => {
-          onSuccess(trip.name, locationToPass)
+          onSuccess(trip.id, trip.name, locationToPass)
         })
       })
     } catch (error) {

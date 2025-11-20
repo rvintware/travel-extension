@@ -9,7 +9,7 @@ import { CreateTripView } from "./popup/CreateTripView"
 import { Settings } from "./components/Settings"
 import { AddToTripModal } from "./components/AddToTripModal"
 import type { Country, Trip, Location, LocationWithTripData, ViewType } from "./lib/types"
-import { getUserId, getSettings } from "./lib/storage"
+import { getUserId, getSettings, setDefaultTrip } from "./lib/storage"
 import { Cache, arraysEqual } from "./lib/cache"
 import * as api from "./lib/api"
 import "./style.css"
@@ -362,9 +362,17 @@ function IndexPopup() {
     })
   }
   
-  function handleAddToTripSuccess() {
+  function handleAddToTripSuccess(tripId: string, tripName: string, location: Location) {
     setShowAddToTripModal(false)
     setLocationToAdd(null)
+    
+    // OPTIMISTIC UPDATE - Increment location count for the affected trip immediately
+    setTrips(prev => prev.map(trip => {
+      if (trip.id === tripId) {
+        return { ...trip, locationCount: (trip.locationCount || 0) + 1 }
+      }
+      return trip
+    }))
     
     // INVALIDATE CACHE - Force fresh fetch
     Cache.invalidateTrips()
@@ -394,6 +402,37 @@ function IndexPopup() {
     
     // Navigate back to list view
     handleBackFromSettings()
+  }
+  
+  async function handleTripDeleted(tripId: string) {
+    // OPTIMISTIC UPDATE - Remove trip from trips list immediately
+    setTrips(prev => prev.filter(t => t.id !== tripId))
+    
+    // Clear selectedTrip if it was the deleted trip
+    if (selectedTrip?.id === tripId) {
+      setSelectedTrip(null)
+      setView('tripList') // Navigate back to trip list
+    }
+    
+    // Update settings if deleted trip was defaultTripId
+    const settings = await getSettings()
+    if (settings?.defaultTripId === tripId) {
+      await setDefaultTrip(null) // Clear default trip
+    }
+    
+    // INVALIDATE CACHE - Force fresh fetch
+    Cache.invalidateTrips()
+    Cache.invalidateLocations() // Counts changed
+    
+    // Notify background script
+    chrome.runtime.sendMessage({ type: 'TRIP_UPDATED' }).catch(() => {
+      // Background worker not ready, that's fine
+    })
+    
+    // Background refresh to verify (non-blocking)
+    loadDataWithCache().catch(error => {
+      console.error('Refresh failed:', error)
+    })
   }
   
   // Count locations by country
@@ -439,6 +478,7 @@ function IndexPopup() {
           onLocationLinked={handleLocationLinked}
           onLocationUnscheduled={handleLocationUnscheduled}
           onTripUpdated={handleTripUpdated}
+          onTripDeleted={handleTripDeleted}
           onLocationClick={(location) => handleLocationClick(location, { view: 'tripDetail', tripId: selectedTrip.id })}
         />
       )
@@ -452,6 +492,24 @@ function IndexPopup() {
           onBack={handleBackToList}
           onAddToTrip={handleAddToTrip}
           onDelete={handleLocationDeleted}
+          onLocationAddedToTrip={(tripId) => {
+            // OPTIMISTIC UPDATE - Increment location count for the affected trip immediately
+            setTrips(prev => prev.map(trip => {
+              if (trip.id === tripId) {
+                return { ...trip, locationCount: (trip.locationCount || 0) + 1 }
+              }
+              return trip
+            }))
+            
+            // INVALIDATE CACHE - Force fresh fetch
+            Cache.invalidateTrips()
+            Cache.invalidateLocations()
+            
+            // Background refresh to verify (non-blocking)
+            loadDataWithCache().catch(error => {
+              console.error('Refresh failed:', error)
+            })
+          }}
         />
       )
     }

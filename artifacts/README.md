@@ -365,7 +365,7 @@ ViewType =
 1. **Tabs** (Main navigation)
    ```
    ┌──────────────┬──────────────┐  [🔄][⚙️]
-   │ My Locations │  My Trips ⭐ │
+   │ My Locations │  My Trips    │
    └──────────────┴──────────────┘
    ```
 

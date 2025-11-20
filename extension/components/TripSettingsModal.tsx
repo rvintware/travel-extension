@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom'
 import type { Trip } from '../lib/types'
 import { DatePickerField } from './DatePickerField'
 import { Button } from './Button'
+import { ConfirmDialog } from './ConfirmDialog'
 import { useToast } from './Toast'
 import * as api from '../lib/api'
 import {
@@ -11,19 +12,22 @@ import {
   formatDateForAPI
 } from '../lib/dateUtils'
 import { setDefaultTrip, getSettings } from '../lib/storage'
+import { Cache } from '../lib/cache'
 
 interface TripSettingsModalProps {
   isOpen: boolean
   trip: Trip
   onClose: () => void
   onSuccess: (trip: Trip) => void
+  onTripDeleted?: (tripId: string) => void
 }
 
 export function TripSettingsModal({
   isOpen,
   trip,
   onClose,
-  onSuccess
+  onSuccess,
+  onTripDeleted
 }: TripSettingsModalProps) {
   const [name, setName] = useState(trip.name)
   const [description, setDescription] = useState(trip.description || '')
@@ -43,6 +47,8 @@ export function TripSettingsModal({
   const [saving, setSaving] = useState(false)
   const [showWarning, setShowWarning] = useState(false)
   const [affectedCount, setAffectedCount] = useState(0)
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false)
+  const [deleting, setDeleting] = useState(false)
   const { showToast, ToastComponent } = useToast()
   
   // Reset form state when modal opens or trip changes
@@ -58,6 +64,8 @@ export function TripSettingsModal({
       setIsActive(trip.is_active)
       setShowWarning(false)
       setAffectedCount(0)
+      setShowDeleteConfirm(false)
+      setDeleting(false)
     }
   }, [isOpen, trip.id, trip.start_date, trip.end_date, trip.duration_days, trip.name, trip.description, trip.is_active])
   
@@ -172,6 +180,34 @@ export function TripSettingsModal({
       showToast('Failed to update trip', 'error')
     } finally {
       setSaving(false)
+    }
+  }
+  
+  async function handleDeleteTrip() {
+    setDeleting(true)
+    try {
+      // STEP 1: Perform API call
+      await api.deleteTrip(trip.id)
+      
+      // STEP 2: Invalidate cache
+      await Cache.invalidateTrips()
+      await Cache.invalidateLocations()
+      
+      // STEP 3: Close confirmation dialog
+      setShowDeleteConfirm(false)
+      
+      // STEP 4: Close modal
+      onClose()
+      
+      // STEP 5: Notify parent via callback
+      onTripDeleted?.(trip.id)
+      
+      // STEP 6: Show success toast
+      showToast('Trip deleted successfully', 'success')
+    } catch (error) {
+      console.error('Failed to delete trip:', error)
+      showToast('Failed to delete trip', 'error')
+      setDeleting(false)
     }
   }
   
@@ -322,7 +358,48 @@ export function TripSettingsModal({
             {saving ? 'Saving...' : 'Save'}
           </Button>
         </div>
+        
+        {/* Danger Zone */}
+        <div className="border-t-2 border-red-200 mt-6 pt-6">
+          <div className="bg-red-50 p-4 rounded-lg border border-red-200">
+            <h3 className="text-base font-semibold text-red-900 mb-2 flex items-center gap-2">
+              ⚠️ Danger Zone
+            </h3>
+            
+            <div className="mb-3">
+              <div className="text-sm font-medium text-red-900 mb-1">
+                Delete Trip
+              </div>
+              <div className="text-xs text-red-700 space-y-1">
+                <div>This will permanently delete this trip and all its scheduled locations.</div>
+                <div>Locations will remain in your library.</div>
+                <div className="font-semibold mt-2">Cannot be undone!</div>
+              </div>
+            </div>
+            
+            <Button
+              onClick={() => setShowDeleteConfirm(true)}
+              variant="danger"
+              className="w-full"
+              disabled={deleting}
+            >
+              🗑️ Delete Trip
+            </Button>
+          </div>
+        </div>
       </div>
+      
+      {/* Delete Confirmation Dialog */}
+      <ConfirmDialog
+        isOpen={showDeleteConfirm}
+        title="⚠️ Delete Trip?"
+        message="This will permanently delete this trip and all scheduled locations. Locations will remain in your library. Cannot be undone!"
+        confirmText={deleting ? 'Deleting...' : 'Delete Trip'}
+        confirmVariant="danger"
+        onConfirm={handleDeleteTrip}
+        onCancel={() => setShowDeleteConfirm(false)}
+      />
+      
       {ToastComponent}
     </div>,
     document.body

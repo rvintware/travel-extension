@@ -323,10 +323,23 @@ Click ✏️ pencil icon in trip detail:
 │                           │
 │ ☑ Set as active           │
 │                           │
-│ Countries                 │
-│ [☑ Thailand ☑ Singapore]  │
+│ [Cancel]  [Save]          │ ← Action buttons
 │                           │
-│ [Cancel]  [Save]          │
+│ ─────────────────────────  │ ← Separator
+│                           │
+│ ⚠️ Danger Zone            │
+│ ┌───────────────────────┐│
+│ │ Delete Trip            ││
+│ │ This will permanently  ││
+│ │ delete this trip and    ││
+│ │ all its scheduled       ││
+│ │ locations. Locations    ││
+│ │ will remain in your     ││
+│ │ library.                ││
+│ │ Cannot be undone!       ││
+│ │                         ││
+│ │ [🗑️ Delete Trip]       ││ ← Red button
+│ └───────────────────────┘│
 └───────────────────────────┘
 ```
 
