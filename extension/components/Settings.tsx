@@ -212,26 +212,31 @@ export function Settings({ countries, trips, onBack, onSave, onDeleteAll }: Sett
   
   return (
     <div className="flex flex-col h-full">
-      {/* Header */}
-      <div className="bg-white border-b border-gray-200 p-4 flex-shrink-0">
-        <div className="flex items-center justify-between mb-2">
+      {/* Nav Bar - matches Tabs component structure */}
+      <div className="bg-white border-b border-gray-200 flex items-center justify-between px-2">
+        <button
+          onClick={onBack}
+          className="flex items-center gap-2 text-primary hover:text-primary-dark transition-colors py-3"
+        >
+          <span>←</span>
+          <span className="font-medium">Back</span>
+        </button>
+        
+        <div className="flex items-center gap-1">
           <button
-            onClick={onBack}
-            className="flex items-center gap-2 text-primary hover:text-primary-dark transition-colors"
-          >
-            <span>←</span>
-            <span className="font-medium">Back</span>
-          </button>
-          
-          <button 
             onClick={handleRefresh}
-            className="text-gray-600 hover:text-primary transition-colors"
+            className="p-2 text-gray-600 hover:text-primary hover:bg-gray-100 rounded transition-colors"
             disabled={refreshing}
-            title="Refresh"
+            title="Refresh data"
+            aria-label="Refresh"
           >
-            <span className={refreshing ? 'animate-spin' : ''}>🔄</span>
+            <span className={`text-xl ${refreshing ? 'animate-spin' : ''}`}>🔄</span>
           </button>
         </div>
+      </div>
+      
+      {/* Settings Title Section */}
+      <div className="bg-white border-b border-gray-200 px-4 py-3 flex-shrink-0">
         <h1 className="text-lg font-semibold text-gray-900">⚙️ Settings</h1>
       </div>
       

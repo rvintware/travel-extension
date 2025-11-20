@@ -31,7 +31,6 @@ We've gone from **concept to working AI-powered travel companion** in one intens
 - Supabase database (Pool + References architecture)
 - Country-grouped library
 - Trip organization with day-by-day planning
-- Time estimates with comfort levels
 - Intelligent caching (< 100ms load time)
 - React Portals for modals
 - Custom confirmation dialogs
@@ -120,7 +119,7 @@ We've gone from **concept to working AI-powered travel companion** in one intens
 3. ✅ Organizes by country
 4. ✅ Creates trip itineraries
 5. ✅ Assigns to days
-6. ✅ Time estimates with comfort levels
+6. ✅ Day-by-day organization
 7. ✅ Move between days
 8. ✅ Remove vs delete
 9. ✅ < 100ms load time (cached)

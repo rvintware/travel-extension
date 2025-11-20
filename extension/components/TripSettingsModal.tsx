@@ -3,6 +3,7 @@ import { createPortal } from 'react-dom'
 import type { Trip } from '../lib/types'
 import { DatePickerField } from './DatePickerField'
 import { Button } from './Button'
+import { useToast } from './Toast'
 import * as api from '../lib/api'
 import {
   calculateDuration,
@@ -42,6 +43,7 @@ export function TripSettingsModal({
   const [saving, setSaving] = useState(false)
   const [showWarning, setShowWarning] = useState(false)
   const [affectedCount, setAffectedCount] = useState(0)
+  const { showToast, ToastComponent } = useToast()
   
   // Reset form state when modal opens or trip changes
   // Use specific properties instead of trip object to ensure effect runs when values change
@@ -167,7 +169,7 @@ export function TripSettingsModal({
       onClose()
     } catch (error) {
       console.error('Failed to update trip:', error)
-      alert('Failed to update trip')
+      showToast('Failed to update trip', 'error')
     } finally {
       setSaving(false)
     }
@@ -321,6 +323,7 @@ export function TripSettingsModal({
           </Button>
         </div>
       </div>
+      {ToastComponent}
     </div>,
     document.body
   )

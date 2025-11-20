@@ -12,7 +12,6 @@ A Chrome extension and backend system for capturing, organizing, and planning tr
 
 ### 🗺️ Trip Planning
 - **Day-by-Day Organization**: Plan your trips with daily itineraries
-- **Time Estimates**: See how long each location takes with comfort levels
 - **Flexible Management**: Move locations between days, add from library, remove vs delete
 - **Active Trip System**: Set a default trip for quick saves
 
@@ -351,12 +350,6 @@ ViewType =
     ·12  ·4   ·5   ·3      ·0
    ```
 
-5. **Time Estimate**
-   ```
-   ⏱️ 6h 30m total
-   4h activity + 2h 30m travel
-                    😊 Comfortable
-   ```
 
 **Performance Optimization - Caching Strategy:**
 
@@ -754,7 +747,6 @@ popup.tsx (Root)
 │  │
 │  ├─ TripDetail
 │  │  ├─ DayFilter
-│  │  ├─ TimeEstimate
 │  │  └─ LocationCard (multiple)
 │  │
 │  ├─ CreateTripView

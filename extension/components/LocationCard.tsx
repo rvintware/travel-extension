@@ -12,9 +12,12 @@ interface LocationCardProps {
   onAction: (action: GearAction, data?: any) => void
   onDelete?: () => void
   onAddToTrip?: () => void  // For library context
+  isDragging?: boolean  // For drag and drop state
+  dragHandleProps?: any  // Props from @dnd-kit for drag handle
+  showDragHandle?: boolean  // Whether to show drag handle (when viewing specific day)
 }
 
-export function LocationCard({ location, context, days, onAction, onDelete, onAddToTrip }: LocationCardProps) {
+export function LocationCard({ location, context, days, onAction, onDelete, onAddToTrip, isDragging, dragHandleProps, showDragHandle }: LocationCardProps) {
   const [showDeletePill, setShowDeletePill] = useState(false)
   const domain = getDomain(location.source_url)
   const emoji = getSourceEmoji(location.source_url)
@@ -25,6 +28,15 @@ export function LocationCard({ location, context, days, onAction, onDelete, onAd
     ? location.tips.slice(0, 3) 
     : []
   
+  // Build Google Maps URL using place_id
+  const googleMapsUrl = location.place_id
+    ? `https://www.google.com/maps/place/?q=place_id:${location.place_id}`
+    : location.lat && location.lng
+    ? `https://www.google.com/maps?q=${location.lat},${location.lng}`
+    : location.address
+    ? `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(location.address)}`
+    : null
+  
   // Only show processing for recent locations with screenshots
   const hasContext = (location as any).original_context !== null
   const isRecent = new Date(location.created_at).getTime() > Date.now() - (10 * 60 * 1000)
@@ -33,7 +45,18 @@ export function LocationCard({ location, context, days, onAction, onDelete, onAd
     (hasContext || isRecent)
   
   return (
-    <div className="bg-white border border-gray-300 rounded-lg overflow-hidden shadow-card hover:shadow-card-hover transition-shadow duration-200 relative">
+    <div className={`bg-white border border-gray-300 rounded-lg overflow-hidden shadow-card hover:shadow-card-hover transition-shadow duration-200 relative ${isDragging ? 'opacity-50 shadow-lg rotate-[-2deg]' : ''}`}>
+      {/* Drag Handle - Always visible when showDragHandle is true */}
+      {showDragHandle && dragHandleProps && (
+        <div
+          {...dragHandleProps}
+          className="absolute left-2 top-1/2 -translate-y-1/2 text-gray-400 cursor-grab active:cursor-grabbing text-lg z-10"
+          aria-label="Drag to reorder"
+          role="button"
+        >
+          ≡≡
+        </div>
+      )}
       {/* Day Badge (trip context only, when assigned to a day) */}
       {context === 'trip' && tripData?.dayNumber && (
         <div className="absolute top-3 right-3 bg-primary text-white px-2 py-1 rounded-full text-xs font-medium z-10">
@@ -82,7 +105,7 @@ export function LocationCard({ location, context, days, onAction, onDelete, onAd
           <h3 className="text-xl font-semibold text-gray-900 flex-1">
             {location.name}
           </h3>
-          {context === 'trip' ? (
+          {(context === 'trip' || context === 'library') ? (
             <KebabMenu
               options={buildKebabMenuOptions()}
               currentDay={tripData?.dayNumber || null}
@@ -90,8 +113,8 @@ export function LocationCard({ location, context, days, onAction, onDelete, onAd
                 if (optionId === 'assign-day') {
                   // data is the day number string or 'null' for unassigned
                   onAction('move-to-day', data === 'null' ? null : parseInt(data))
-                } else if (optionId === 'edit-notes') {
-                  onAction('edit', null)
+                } else if (optionId === 'edit-location') {
+                  onAction('edit-location', null)
                 }
               }}
             />
@@ -170,6 +193,21 @@ export function LocationCard({ location, context, days, onAction, onDelete, onAd
             <span>{domain}</span>
             <span>→</span>
           </a>
+          
+          {/* Google Maps Link */}
+          {googleMapsUrl && (
+            <a
+              href={googleMapsUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-sm text-primary hover:text-primary-dark flex items-center gap-1 transition-colors mt-2"
+            >
+              <span>🗺️</span>
+              <span>View on Maps</span>
+              <span>→</span>
+            </a>
+          )}
+          
           <div className="text-xs text-gray-500 mt-1">
             Saved {formatRelativeTime(new Date(location.created_at).getTime())}
           </div>
@@ -180,16 +218,20 @@ export function LocationCard({ location, context, days, onAction, onDelete, onAd
               <button
                 onClick={onAddToTrip}
                 className="bg-primary text-white px-4 py-2 rounded-lg font-medium hover:bg-primary-dark transition-colors"
+                aria-label="Add to trip"
+                role="button"
               >
                 Add to Trip
               </button>
               
               {/* Delete Bin Icon or Pill - positioned inline, replacing trash bin */}
-          {!showDeletePill && onDelete && (
+              {!showDeletePill && onDelete && (
             <button
               onClick={() => setShowDeletePill(true)}
                   className="text-xl text-gray-400 hover:text-red-500 transition-colors"
               title="Delete"
+              aria-label="Delete location"
+              role="button"
             >
               🗑️
             </button>
@@ -215,6 +257,8 @@ export function LocationCard({ location, context, days, onAction, onDelete, onAd
                   onClick={() => setShowDeletePill(true)}
                   className="absolute bottom-4 right-4 text-xl text-gray-400 hover:text-red-500 transition-colors"
                   title="Remove from trip"
+                  aria-label="Remove from trip"
+                  role="button"
                 >
                   🗑️
                 </button>
@@ -236,35 +280,45 @@ export function LocationCard({ location, context, days, onAction, onDelete, onAd
     </div>
   )
   
-  // Helper function to build kebab menu options for trip context
+  // Helper function to build kebab menu options
   function buildKebabMenuOptions(): KebabMenuOption[] {
     const options: KebabMenuOption[] = []
     
-    // Assign to Day option with submenu
-    if (days && days.length > 0) {
+    if (context === 'library') {
+      // Library context: Edit Location
       options.push({
-        id: 'assign-day',
-        label: 'Assign to Day',
-        icon: '📅',
-        submenu: [
-          ...days.map(day => ({
-            id: day.toString(),
-            label: `Day ${day}`,
-          })),
-          {
-            id: 'null',
-            label: 'Unassigned',
-          }
-        ]
+        id: 'edit-location',
+        label: 'Edit Location',
+        icon: '✏️',
+      })
+    } else if (context === 'trip') {
+      // Trip context: Assign to Day + Edit Location
+      // Assign to Day option with submenu
+      if (days && days.length > 0) {
+        options.push({
+          id: 'assign-day',
+          label: 'Assign to Day',
+          icon: '📅',
+          submenu: [
+            ...days.map(day => ({
+              id: day.toString(),
+              label: `Day ${day}`,
+            })),
+            {
+              id: 'null',
+              label: 'Unassigned',
+            }
+          ]
+        })
+      }
+      
+      // Edit Location option
+      options.push({
+        id: 'edit-location',
+        label: 'Edit Location',
+        icon: '✏️',
       })
     }
-    
-    // Edit Notes option
-    options.push({
-      id: 'edit-notes',
-      label: 'Edit Notes',
-      icon: '📝',
-    })
     
     return options
   }

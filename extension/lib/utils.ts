@@ -46,6 +46,25 @@ export function getDomain(url: string): string {
 }
 
 /**
+ * Debounce a function call
+ */
+export function debounce<T extends (...args: any[]) => any>(
+  fn: T,
+  delay: number
+): (...args: Parameters<T>) => void {
+  let timeoutId: NodeJS.Timeout | null = null
+  
+  return (...args: Parameters<T>) => {
+    if (timeoutId) {
+      clearTimeout(timeoutId)
+    }
+    timeoutId = setTimeout(() => {
+      fn(...args)
+    }, delay)
+  }
+}
+
+/**
  * Check if URL is a Reddit post
  */
 export function isRedditUrl(url: string): boolean {

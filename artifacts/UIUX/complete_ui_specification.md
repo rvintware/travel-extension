@@ -325,6 +325,13 @@ LOCATION CARD (Production Design)
 │ │ hover:text-primary-dark             │ │
 │ │ Clickable → new tab                 │ │
 │ │                                     │ │
+│ │ 🗺️ View on Maps →                  │ │
+│ │ (text-sm, text-primary, mt-2)       │ │
+│ │ hover:text-primary-dark             │ │
+│ │ Clickable → Google Maps (new tab)   │ │
+│ │ (Only shown if place_id/lat/lng/    │ │
+│ │  address available)                 │ │
+│ │                                     │ │
 │ │ Saved 2 hours ago                   │ │
 │ │ (text-xs, text-gray-500, mt-1)      │ │
 │ └─────────────────────────────────────┘ │
@@ -352,7 +359,87 @@ CARD SPECIFICATIONS:
 ├─ Metadata icons: 20px emoji + 14px text
 ├─ Tips bullets: • (not ✓ or dash)
 ├─ Source link: Arrow (→) indicates external
+├─ Google Maps link: Shown below source link if location data available
+│  └─ URL priority: place_id > lat/lng > address
 └─ All clickable links: hover effect + cursor-pointer
+```
+
+---
+
+### 4.5. Compact Location Card - Trip Detail View
+
+```
+COMPACT LOCATION CARD (Trip Detail View)
+════════════════════════════════════════════
+
+┌─────────────────────────────────────────┐
+│ Fukuoka                          [⋮]  │ ← Line 1: Name + KebabMenu
+│                                         │   (text-lg, semibold)
+│ [Day 3]                                 │ ← Line 2: Day Badge (conditional)
+│                                         │   (bg-primary, rounded-full)
+│ 📍 Fukuoka, Japan                      │ ← Line 3: Address (conditional)
+│                                         │   (text-sm, text-gray-600)
+│                                         │
+│ 🔴 reddit.com →                        │ ← Line 4: Reddit link (standalone)
+│                                         │   (text-sm, text-primary)
+│                                         │   (hover:text-primary-dark)
+│                                         │
+│ 🗺️ View on Maps →                🗑️ │ ← Line 5: Google Maps + Trash
+│                                         │   (flex justify-between)
+│                                         │   (left: Google Maps link)
+│                                         │   (right: Trash icon)
+└─────────────────────────────────────────┘
+
+CARD SPECIFICATIONS:
+├─ Container: bg-white, border-gray-300, rounded-lg
+├─ Padding: p-3 (12px all sides)
+├─ Shadow: shadow-card, hover:shadow-card-hover
+├─ Cursor: cursor-pointer (entire card clickable)
+│
+├─ Line 1: Location Name + KebabMenu
+│  ├─ Layout: flex justify-between
+│  ├─ Name: text-lg, font-semibold, text-gray-900
+│  └─ KebabMenu: Right-aligned, stops propagation
+│
+├─ Line 2: Day Badge (conditional)
+│  ├─ Display: Only if dayNumber exists
+│  ├─ Style: bg-primary, text-white, rounded-full
+│  ├─ Padding: px-2, py-1
+│  └─ Font: text-xs, font-medium
+│
+├─ Line 3: Address (conditional)
+│  ├─ Display: Only if address exists
+│  ├─ Icon: 📍 emoji
+│  ├─ Text: text-sm, text-gray-600
+│  └─ Margin: mb-3 (12px bottom)
+│
+├─ Line 4: Reddit Link (standalone)
+│  ├─ Layout: Standalone line, left-aligned
+│  ├─ Icon: Source emoji (🔴 for reddit.com)
+│  ├─ Text: Domain name + → arrow
+│  ├─ Styling: text-sm, text-primary
+│  ├─ Hover: hover:text-primary-dark
+│  └─ Margin: mb-2 (8px bottom)
+│
+├─ Line 5: Google Maps + Trash (same line)
+│  ├─ Container: flex items-center justify-between
+│  ├─ Left: Google Maps link
+│  │  ├─ Display: Only if googleMapsUrl exists
+│  │  ├─ Icon: 🗺️ emoji
+│  │  ├─ Text: "View on Maps" + → arrow
+│  │  ├─ Styling: text-sm, text-primary
+│  │  └─ Hover: hover:text-primary-dark
+│  └─ Right: Trash icon
+│     ├─ Display: Only if onDelete exists
+│     ├─ Icon: 🗑️ emoji
+│     ├─ Styling: text-xl, text-gray-400
+│     ├─ Hover: hover:text-red-500
+│     └─ Click: Opens DeletePill (position="inline")
+│
+└─ Google Maps URL Priority:
+   ├─ Priority 1: place_id → place/?q=place_id:{id}
+   ├─ Priority 2: lat/lng → maps?q={lat},{lng}
+   └─ Priority 3: address → search/?api=1&query={address}
 ```
 
 ---
@@ -361,13 +448,19 @@ CARD SPECIFICATIONS:
 
 ```
 ┌─────────────────────────────────────────┐
-│  ← Back (text-primary)            [🔄] │ ← p-4, border-b
-│                                         │
-│  Tokyo 2025 (text-lg, semibold)        │
-│  5 Countries · 12 locations            │ ← text-sm, gray-600
-│  🗺️ Map View                           │    (first line: gap-2)
-│                        📤 Export        │ ← (second line: right-aligned)
-│                                         │
+│  ← Back                    ✏️    🔄    │ ← Nav bar: px-2, matches Tabs
+│  ▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔│
+├─────────────────────────────────────────┤
+│  ┌───────────────────────────────────┐ │
+│  │ Tokyo 2025        Oct 31 - Nov 4│ │ ← Line 1: justify-between
+│  │ (text-lg semibold) (text-sm gray) │ │
+│  │                                   │ │
+│  │ 5 Countries                        │ │ ← Line 2: left-aligned
+│  │ (text-sm gray-600)                │ │
+│  │                                   │ │
+│  │ 12 locations            📤 Export │ │ ← Line 3: justify-between
+│  │ (text-sm gray-600) (text-sm primary)│ │
+│  └───────────────────────────────────┘ │ ← bg-gray-50, rounded-lg, p-3
 ├─────────────────────────────────────────┤
 │  Day Filters (bg-gray-50, py-2, px-4)  │
 │  (flex, gap-1)                          │
@@ -378,37 +471,50 @@ CARD SPECIFICATIONS:
 │  (px-3, py-1.5, rounded, text-sm)      │
 │                                         │
 ├─────────────────────────────────────────┤
-│  Time Estimate (mx-4, my-2)            │
-│  ┌───────────────────────────────────┐ │
-│  │ ⏱️ 6h 30m total (text-sm, bold)   │ │ ← bg-gray-50, p-3
-│  │ 4h activity + 2h 30m travel        │ │ ← text-xs, gray-600
-│  │                    😊 Comfortable  │ │ ← text-2xl + text-sm
-│  └───────────────────────────────────┘ │
-│                                         │
-├─────────────────────────────────────────┤
 │  Day 1 (4 locations) - text-base       │
 │  (p-4, space-y-6) ← 24px spacing!      │
 │                                         │
 │  ┌───────────────────────────────────┐ │
-│  │ [Location Card - see spec above]  │ │
+│  │ [CompactLocationCard - see 4.5]   │ │ ← Compact cards in trip detail
 │  └───────────────────────────────────┘ │
 │                                         │
 │  ┌───────────────────────────────────┐ │
-│  │ [Location Card]                   │ │
+│  │ [CompactLocationCard]             │ │
 │  └───────────────────────────────────┘ │
 └─────────────────────────────────────────┘
 
-HEADER METADATA:
-├─ Countries count: Dynamically calculated from unique country_id in locations
-├─ Display: "X Country" (singular) or "X Countries" (plural)
-├─ No country flag emoji shown
-├─ Layout: Stacked two-line design for better touch targets
-├─ First line: Country count · location count · Map View button
-├─ Second line: Export button (right-aligned with justify-end)
-├─ Text size: text-sm
-├─ Color: text-gray-600
-├─ Spacing: gap-2 between items, mt-1 for second line
-└─ Buttons: text-primary with hover:text-primary-dark
+NAV BAR (matches Tabs component):
+├─ Padding: px-2 (8px horizontal)
+├─ Border: border-b border-gray-200
+├─ Layout: flex items-center justify-between
+├─ Back button: Left side, text-primary
+├─ Icons: Right side, gap-1 between icons
+├─ Icon size: text-xl (20px)
+├─ Icon padding: p-2
+├─ Icon hover: hover:text-primary hover:bg-gray-100 rounded
+└─ Matches home screen nav bar exactly
+
+TRIP INFO SECTION:
+├─ Container Padding: py-2 px-4 (8px vertical, 16px horizontal)
+├─ Border: border-b border-gray-200
+├─ Card Wrapper: bg-gray-50, rounded-lg, p-3 (12px padding)
+├─ Line 1: Trip Name + Dates
+│  ├─ Layout: flex items-center justify-between mb-2 (8px margin bottom)
+│  ├─ Trip name: text-lg, font-semibold, text-gray-900, leading-tight (left)
+│  └─ Dates: text-sm, text-gray-600 (right, conditional - only if available)
+├─ Line 2: Countries Count
+│  ├─ Layout: text-sm, text-gray-600, mb-2 (8px margin bottom)
+│  ├─ Display: Full width, left-aligned
+│  └─ Format: "X Country" (singular) or "X Countries" (plural)
+├─ Line 3: Locations Count + Export
+│  ├─ Layout: flex items-center justify-between
+│  ├─ Locations: text-sm, text-gray-600 (left)
+│  │  └─ Format: "X location" or "X locations"
+│  └─ Export button: text-sm, text-primary, font-medium (right)
+│     ├─ Hover: hover:text-primary-dark
+│     ├─ Icon: 📤 emoji
+│     └─ Disabled: opacity-50
+└─ Spacing: mb-2 (8px) between lines for visual breathing room
 
 DAY FILTER TABS:
 ├─ Inactive: bg-white, text-gray-700, border
@@ -417,16 +523,6 @@ DAY FILTER TABS:
 ├─ Font: text-sm, font-medium
 ├─ Count: text-xs, opacity-80
 └─ Hover: bg-gray-100 (inactive only)
-
-TIME ESTIMATE COMPONENT:
-├─ Background: bg-gray-50
-├─ Border: 1px gray-200
-├─ Padding: p-3 (12px)
-├─ Margin: mx-4 my-2
-├─ Total time: text-sm, font-medium
-├─ Breakdown: text-xs, text-gray-600
-├─ Emoji: text-2xl
-└─ Comfort text: text-sm, font-medium
 ```
 
 ---

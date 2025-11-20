@@ -21,7 +21,6 @@
 - Two-tab UI (My Locations | My Trips)
 - Country-grouped library
 - Day-by-day trip planning
-- Time estimates with comfort levels
 - Intelligent caching (< 100ms load time)
 - React Portals for modals
 - Custom confirmation dialogs
@@ -86,7 +85,6 @@
 - Country grouping
 - Trip with day-by-day planning
 - Move between days
-- Time estimates
 - Remove vs delete (proper distinction)
 
 **Performance:**
@@ -227,7 +225,7 @@
 - Extracts with GPT-4o Vision (90% accuracy)
 - Enriches with Google Places (photos, addresses)
 - Organizes by country and trip
-- Plans day-by-day with time estimates
+- Plans day-by-day itineraries
 - Handles multi-location extraction intelligently
 - Auto-links and organizes everything
 - Loads in < 100ms (feels instant)

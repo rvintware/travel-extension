@@ -1,13 +1,16 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useCallback } from 'react'
+import { DndContext, closestCenter, DragEndEvent } from '@dnd-kit/core'
 import type { Trip, LocationWithTripData } from '../lib/types'
-import { LocationCard } from '../components/LocationCard'
+import { CompactLocationCard } from '../components/CompactLocationCard'
+import { SortableCompactLocationCard } from '../components/SortableCompactLocationCard'
 import { DayFilter } from '../components/DayFilter'
-import { TimeEstimate } from '../components/TimeEstimate'
 import { TripSettingsModal } from '../components/TripSettingsModal'
-import { NotesEditorModal } from '../components/NotesEditorModal'
+import { LocationEditModal } from '../components/LocationEditModal'
+import { useToast } from '../components/Toast'
 import type { GearAction } from '../components/GearMenu'
 import * as api from '../lib/api'
 import { Cache } from '../lib/cache'
+import { debounce } from '../lib/utils'
 
 interface TripDetailProps {
   trip: Trip
@@ -17,9 +20,10 @@ interface TripDetailProps {
   onLocationLinked?: () => void
   onLocationUnscheduled?: () => void
   onTripUpdated?: (trip: Trip) => void  // Callback when trip is updated
+  onLocationClick?: (location: LocationWithTripData) => void  // NEW - for navigation to detail view
 }
 
-export function TripDetail({ trip, onBack, onLocationMoved, onLocationRemoved, onLocationLinked, onLocationUnscheduled, onTripUpdated }: TripDetailProps) {
+export function TripDetail({ trip, onBack, onLocationMoved, onLocationRemoved, onLocationLinked, onLocationUnscheduled, onTripUpdated, onLocationClick }: TripDetailProps) {
   const [locations, setLocations] = useState<LocationWithTripData[]>([])
   const [byDay, setByDay] = useState<Record<string | number, LocationWithTripData[]>>({})
   const [selectedDay, setSelectedDay] = useState<number | 'all' | 'unscheduled'>('all')
@@ -27,9 +31,11 @@ export function TripDetail({ trip, onBack, onLocationMoved, onLocationRemoved, o
   const [refreshing, setRefreshing] = useState(false)
   const [exporting, setExporting] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
-  const [notesEditorOpen, setNotesEditorOpen] = useState(false)
-  const [editingLocation, setEditingLocation] = useState<LocationWithTripData | null>(null)
   const [currentTrip, setCurrentTrip] = useState<Trip>(trip)
+  const [reorderError, setReorderError] = useState<{ previousOrder: string[]; dayNumber: number } | null>(null)
+  const [editModalOpen, setEditModalOpen] = useState(false)
+  const [selectedLocationForEdit, setSelectedLocationForEdit] = useState<LocationWithTripData | null>(null)
+  const { showToast, ToastComponent } = useToast()
   
   // Calculate unique countries count from locations
   const uniqueCountriesCount = React.useMemo(() => {
@@ -66,8 +72,10 @@ export function TripDetail({ trip, onBack, onLocationMoved, onLocationRemoved, o
       const data = await api.getTripLocations(currentTrip.id)
       setLocations(data.locations)
       setByDay(data.byDay)
+      setReorderError(null) // Clear any reorder errors on successful load
     } catch (error) {
       console.error('Failed to load trip locations:', error)
+      showToast('Failed to load locations', 'error')
     } finally {
       setLoading(false)
     }
@@ -132,24 +140,6 @@ export function TripDetail({ trip, onBack, onLocationMoved, onLocationRemoved, o
     ? byDay.unscheduled || []
     : byDay[selectedDay] || []
   
-  // Calculate time estimate for selected day
-  const calculateTimeEstimate = () => {
-    if (selectedDay === 'all' || selectedDay === 'unscheduled') {
-      return null
-    }
-    
-    const dayLocations = byDay[selectedDay] || []
-    const activityMinutes = dayLocations.reduce((sum, loc) => 
-      sum + (loc.estimatedDurationMinutes || 0), 0
-    )
-    
-    // TODO: Get travel times from API (location_distances table)
-    const travelMinutes = 0  // For MVP, set to 0
-    
-    return { activityMinutes, travelMinutes }
-  }
-  
-  const timeEstimate = calculateTimeEstimate()
   
   const handleAction = async (location: LocationWithTripData, action: GearAction, data?: any) => {
     switch (action) {
@@ -158,10 +148,10 @@ export function TripDetail({ trip, onBack, onLocationMoved, onLocationRemoved, o
         console.log('Set time for:', location.id)
         break
       
-      case 'edit':
-        // Open notes editor modal
-        setEditingLocation(location)
-        setNotesEditorOpen(true)
+      case 'edit-location':
+        // Open edit modal instead of navigating
+        setSelectedLocationForEdit(location)
+        setEditModalOpen(true)
         break
       
       case 'move-to-day':
@@ -227,6 +217,7 @@ export function TripDetail({ trip, onBack, onLocationMoved, onLocationRemoved, o
           })
         } catch (error) {
           console.error('Failed to move location:', error)
+          showToast('Failed to assign location to day', 'error')
           // On API error, refresh to get real state
           loadTripLocations()
         }
@@ -279,6 +270,7 @@ export function TripDetail({ trip, onBack, onLocationMoved, onLocationRemoved, o
           })
         } catch (error) {
           console.error('Failed to unschedule:', error)
+          showToast('Failed to unschedule location', 'error')
           loadTripLocations()
         }
         break
@@ -324,49 +316,9 @@ export function TripDetail({ trip, onBack, onLocationMoved, onLocationRemoved, o
       })
     } catch (error) {
       console.error('Failed to remove from trip:', error)
+      showToast('Failed to remove location from trip', 'error')
       // On API error, refresh to get real state
       loadTripLocations()
-    }
-  }
-  
-  async function handleSaveNotes(notes: string) {
-    if (!editingLocation || !editingLocation.tripLocationId) return
-    
-    try {
-      // STEP 1: Perform API call
-      await api.updateTripLocation(editingLocation.tripLocationId, { notes })
-      
-      // STEP 2: OPTIMISTIC UPDATE - Update UI immediately
-      setLocations(prev => prev.map(loc => 
-        loc.id === editingLocation.id
-          ? { ...loc, notes }
-          : loc
-      ))
-      
-      // Update byDay grouping optimistically
-      setByDay(prev => {
-        const newByDay = { ...prev }
-        Object.keys(newByDay).forEach(day => {
-          if (newByDay[day]) {
-            newByDay[day] = newByDay[day].map(l => 
-              l.id === editingLocation.id ? { ...l, notes } : l
-            )
-          }
-        })
-        return newByDay
-      })
-      
-      // STEP 3: Invalidate caches
-      await Cache.invalidateLocations()
-      
-      // STEP 4: Background refresh to verify
-      loadTripLocations().catch(error => {
-        console.error('Refresh failed:', error)
-        loadTripLocations()
-      })
-    } catch (error) {
-      console.error('Failed to save notes:', error)
-      throw error // Let NotesEditorModal handle error display
     }
   }
   
@@ -404,78 +356,221 @@ export function TripDetail({ trip, onBack, onLocationMoved, onLocationRemoved, o
   }
   
   async function handleSettingsSuccess(updatedTrip: Trip) {
-    // Update local trip state with returned data (optimistic)
-    setCurrentTrip(updatedTrip)
-    
-    // Refresh trip locations
-    loadTripLocations()
-    
-    // Fetch fresh trip data from server to ensure consistency
-    const freshTrip = await refreshTripData()
-    
-    // Notify parent component to update its state
-    onTripUpdated?.(freshTrip)
+    try {
+      // Update local trip state with returned data (optimistic)
+      setCurrentTrip(updatedTrip)
+      
+      // Refresh trip locations
+      loadTripLocations()
+      
+      // Fetch fresh trip data from server to ensure consistency
+      const freshTrip = await refreshTripData()
+      
+      // Notify parent component to update its state
+      onTripUpdated?.(freshTrip)
+    } catch (error) {
+      console.error('Failed to update trip settings:', error)
+      showToast('Failed to update trip settings', 'error')
+    }
   }
+
+  // Handle drag end for reordering locations
+  const handleDragEnd = async (event: DragEndEvent) => {
+    const { active, over } = event
+    
+    if (!over || active.id === over.id) {
+      return
+    }
+    
+    // Only allow reordering when viewing a specific day
+    if (selectedDay === 'all' || selectedDay === 'unscheduled' || typeof selectedDay !== 'number') {
+      return
+    }
+    
+    const dayLocations = filteredLocations
+    const oldIndex = dayLocations.findIndex(loc => loc.id === active.id)
+    const newIndex = dayLocations.findIndex(loc => loc.id === over.id)
+    
+    if (oldIndex === -1 || newIndex === -1) {
+      return
+    }
+    
+    // Calculate new order
+    const newOrder = [...dayLocations]
+    const [movedItem] = newOrder.splice(oldIndex, 1)
+    newOrder.splice(newIndex, 0, movedItem)
+    const newLocationIds = newOrder.map(loc => loc.id)
+    
+    // Store previous order for revert
+    const previousOrder = dayLocations.map(loc => loc.id)
+    setReorderError({ previousOrder, dayNumber: selectedDay })
+    
+    // Optimistic update: reorder immediately
+    setLocations(prev => {
+      const reordered = [...prev]
+      const dayLocationIds = new Set(newLocationIds)
+      const dayLocationsInOrder = newLocationIds.map(id => 
+        reordered.find(loc => loc.id === id)
+      ).filter(Boolean) as LocationWithTripData[]
+      
+      // Update display_order in the locations array
+      dayLocationsInOrder.forEach((loc, index) => {
+        const locationIndex = reordered.findIndex(l => l.id === loc.id)
+        if (locationIndex !== -1) {
+          reordered[locationIndex] = { ...reordered[locationIndex], displayOrder: index + 1 }
+        }
+      })
+      
+      return reordered
+    })
+    
+    // Update byDay grouping optimistically
+    setByDay(prev => ({
+      ...prev,
+      [selectedDay]: newOrder
+    }))
+    
+    // Call API to save new order
+    try {
+      await api.reorderTripLocations(currentTrip.id, selectedDay, newLocationIds)
+      setReorderError(null) // Clear error state on success
+      showToast('Order updated', 'success')
+      
+      // Background refresh to verify
+      loadTripLocations().catch(error => {
+        console.error('Refresh failed:', error)
+        loadTripLocations()
+      })
+    } catch (error) {
+      console.error('Failed to reorder locations:', error)
+      
+      // Revert optimistic update - restore previous order
+      const previousOrderLocations = previousOrder.map(id => 
+        dayLocations.find(loc => loc.id === id)
+      ).filter(Boolean) as LocationWithTripData[]
+      
+      setLocations(prev => {
+        const reverted = [...prev]
+        previousOrderLocations.forEach((loc, index) => {
+          const locationIndex = reverted.findIndex(l => l.id === loc.id)
+          if (locationIndex !== -1) {
+            reverted[locationIndex] = { ...reverted[locationIndex], displayOrder: index + 1 }
+          }
+        })
+        return reverted
+      })
+      
+      setByDay(prev => ({
+        ...prev,
+        [selectedDay]: previousOrderLocations
+      }))
+      
+      showToast('Failed to save order', 'error')
+    }
+  }
+
+  // Retry reorder with debouncing
+  const handleRetryReorder = useCallback(() => {
+    if (!reorderError) return
+    
+    const { dayNumber } = reorderError
+    const dayLocations = byDay[dayNumber] || []
+    const currentOrder = dayLocations.map(loc => loc.id)
+    
+    if (currentOrder.length === 0) {
+      setReorderError(null)
+      return
+    }
+    
+    const retryFn = async () => {
+      try {
+        await api.reorderTripLocations(currentTrip.id, dayNumber, currentOrder)
+        setReorderError(null)
+        showToast('Order updated', 'success')
+        loadTripLocations().catch(() => loadTripLocations())
+      } catch (error) {
+        console.error('Retry failed:', error)
+        showToast('Failed to save order', 'error')
+      }
+    }
+    
+    debounce(retryFn, 500)()
+  }, [reorderError, currentTrip.id, byDay, showToast])
   
   return (
     <div className="flex flex-col h-full">
-      {/* Header */}
-      <div className="bg-white border-b border-gray-200 p-4 flex-shrink-0">
-        <div className="flex items-center justify-between mb-2">
+      {/* Nav Bar - matches Tabs component structure */}
+      <div className="bg-white border-b border-gray-200 flex items-center justify-between px-2">
+        <button
+          onClick={onBack}
+          className="flex items-center gap-2 text-primary hover:text-primary-dark transition-colors py-3"
+        >
+          <span>←</span>
+          <span className="font-medium">Back</span>
+        </button>
+        
+        <div className="flex items-center gap-1">
           <button
-            onClick={onBack}
-            className="flex items-center gap-2 text-primary hover:text-primary-dark transition-colors"
+            onClick={() => setSettingsOpen(true)}
+            className="p-2 text-gray-600 hover:text-primary hover:bg-gray-100 rounded transition-colors"
+            title="Edit trip"
+            aria-label="Edit trip details"
           >
-            <span>←</span>
-            <span className="font-medium">Back</span>
+            <span className="text-xl">✏️</span>
           </button>
-          
-          <div className="flex items-center gap-1">
-            <button
-              onClick={() => setSettingsOpen(true)}
-              className="p-2 text-gray-600 hover:text-primary hover:bg-gray-100 rounded transition-colors"
-              title="Edit trip"
-            >
-              <span className="text-xl">✏️</span>
-            </button>
           <button 
             onClick={handleRefresh}
-              className="p-2 text-gray-600 hover:text-primary hover:bg-gray-100 rounded transition-colors"
+            className="p-2 text-gray-600 hover:text-primary hover:bg-gray-100 rounded transition-colors"
             disabled={refreshing}
-            title="Refresh"
-              aria-label="Refresh"
+            title="Refresh data"
+            aria-label="Refresh trip data"
           >
-              <span className={`text-xl ${refreshing ? 'animate-spin' : ''}`}>🔄</span>
+            <span className={`text-xl ${refreshing ? 'animate-spin' : ''}`}>🔄</span>
           </button>
-          </div>
         </div>
-        <div>
-          <h1 className="text-lg font-semibold text-gray-900">{currentTrip.name}</h1>
-          <div className="text-sm text-gray-600">
-            <div className="flex items-center gap-2">
-              <span>
-                {uniqueCountriesCount} {uniqueCountriesCount === 1 ? 'Country' : 'Countries'}
-              </span>
-              <span>·</span>
-              <span>{locations.length} {locations.length === 1 ? 'location' : 'locations'}</span>
-            </div>
-            {/* Display trip dates if available */}
+      </div>
+      
+      {/* Trip Info Section */}
+      <div className="bg-white border-b border-gray-200 py-2 px-4 flex-shrink-0">
+        <div className="bg-gray-50 rounded-lg p-3">
+          {/* Line 1: Trip Name + Dates */}
+          <div className="flex items-center justify-between mb-2">
+            <h1 className="text-lg font-semibold text-gray-900 leading-tight">
+              {currentTrip.name}
+            </h1>
             {currentTrip.start_date && currentTrip.end_date && (
-              <div className="text-sm text-gray-600 mt-1">
+              <span className="text-sm text-gray-600">
                 {new Date(currentTrip.start_date).toLocaleDateString('en-US', { day: 'numeric', month: 'short' })} - {new Date(currentTrip.end_date).toLocaleDateString('en-US', { day: 'numeric', month: 'short' })}
-              </div>
+              </span>
             )}
-            <div className="flex items-center justify-end mt-1">
-              <button
-                onClick={handleExport}
-                disabled={exporting}
-                className="text-primary hover:text-primary-dark transition-colors flex items-center gap-1 font-medium disabled:opacity-50"
-                title="Export trip"
-              >
-                <span>📤</span>
-                <span>{exporting ? 'Exporting...' : 'Export'}</span>
-              </button>
-            </div>
+          </div>
+          
+          {/* Line 2: Countries Count + Days Count */}
+          <div className="flex items-center justify-between text-sm text-gray-600 mb-2">
+            <span>
+              {uniqueCountriesCount} {uniqueCountriesCount === 1 ? 'Country' : 'Countries'}
+            </span>
+            {currentTrip.duration_days && (
+              <span>
+                {currentTrip.duration_days} {currentTrip.duration_days === 1 ? 'day' : 'days'}
+              </span>
+            )}
+          </div>
+          
+          {/* Line 3: Locations Count + Export */}
+          <div className="flex items-center justify-between">
+            <span className="text-sm text-gray-600">
+              {locations.length} {locations.length === 1 ? 'location' : 'locations'}
+            </span>
+            <button
+              onClick={handleExport}
+              disabled={exporting}
+              className="text-sm text-primary hover:text-primary-dark transition-colors flex items-center gap-1 font-medium disabled:opacity-50"
+              title="Export trip"
+            >
+              <span>📤</span>
+              <span>{exporting ? 'Exporting...' : 'Export'}</span>
+            </button>
           </div>
         </div>
       </div>
@@ -494,14 +589,6 @@ export function TripDetail({ trip, onBack, onLocationMoved, onLocationRemoved, o
         </div>
       )}
       
-      {/* Time Estimate (for specific days only) */}
-      {timeEstimate && (
-        <TimeEstimate
-          activityMinutes={timeEstimate.activityMinutes}
-          travelMinutes={timeEstimate.travelMinutes}
-        />
-      )}
-      
       {/* Content */}
       <div className="flex-1 overflow-y-auto">
         {loading ? (
@@ -509,43 +596,55 @@ export function TripDetail({ trip, onBack, onLocationMoved, onLocationRemoved, o
             <div className="text-gray-500 text-sm">Loading...</div>
           </div>
         ) : filteredLocations.length === 0 ? (
-          <div className="flex flex-col items-center justify-center py-12 px-6 text-center">
-            <div className="text-4xl mb-3">📍</div>
-            <p className="text-sm text-gray-600">
-              {selectedDay === 'all' 
-                ? 'No locations in this trip yet'
-                : selectedDay === 'unscheduled'
-                ? 'No unscheduled locations'
-                : `No locations for Day ${selectedDay}`
-              }
-            </p>
+          <div className="flex flex-col items-center justify-center py-12 px-6 text-center" aria-live="polite">
+            {selectedDay === 'all' ? (
+              <>
+                <div className="text-4xl mb-3">📍</div>
+                <h3 className="text-sm font-medium text-gray-900 mb-1">No locations in this trip yet</h3>
+                <p className="text-sm text-gray-600">Add locations from your library or save new ones</p>
+              </>
+            ) : selectedDay === 'unscheduled' ? (
+              <>
+                <div className="text-4xl mb-3">📋</div>
+                <h3 className="text-sm font-medium text-gray-900 mb-1">No unscheduled locations</h3>
+                <p className="text-sm text-gray-600">All locations are assigned to days</p>
+              </>
+            ) : (
+              <>
+                <div className="text-4xl mb-3">📅</div>
+                <h3 className="text-sm font-medium text-gray-900 mb-1">No locations for Day {selectedDay}</h3>
+                <p className="text-sm text-gray-600">Assign locations from the All tab or add new ones</p>
+                <p className="text-xs text-gray-500 mt-2">Use the kebab menu (⋮) to assign locations to this day</p>
+              </>
+            )}
           </div>
         ) : (
-          <div className="p-4 space-y-6">
-            {filteredLocations.map(location => (
-              <LocationCard
-                key={location.id}
-                location={location}
-                context="trip"
-                days={days}
-                onAction={(action, data) => handleAction(location, action, data)}
-                onDelete={() => handleRemoveFromTrip(location)}
-              />
-            ))}
-          </div>
+          <DndContext
+            collisionDetection={closestCenter}
+            onDragEnd={handleDragEnd}
+          >
+            <div className="p-4 space-y-6">
+              {filteredLocations.map(location => {
+                // Use SortableCompactLocationCard when viewing specific day, CompactLocationCard otherwise
+                const isSpecificDay = typeof selectedDay === 'number'
+                const CardComponent = isSpecificDay ? SortableCompactLocationCard : CompactLocationCard
+                
+                return (
+                  <CardComponent
+                    key={location.id}
+                    location={location}
+                    days={days}
+                    onAction={(action, data) => handleAction(location, action, data)}
+                    onDelete={() => handleRemoveFromTrip(location)}
+                    onLocationClick={onLocationClick}
+                    showDragHandle={isSpecificDay}
+                  />
+                )
+              })}
+            </div>
+          </DndContext>
         )}
       </div>
-      
-      {/* Notes Editor Modal */}
-      <NotesEditorModal
-        isOpen={notesEditorOpen}
-        initialNotes={editingLocation?.notes || ''}
-        onSave={handleSaveNotes}
-        onClose={() => {
-          setNotesEditorOpen(false)
-          setEditingLocation(null)
-        }}
-      />
       
       {/* Settings Modal */}
       <TripSettingsModal
@@ -554,6 +653,70 @@ export function TripDetail({ trip, onBack, onLocationMoved, onLocationRemoved, o
         onClose={() => setSettingsOpen(false)}
         onSuccess={handleSettingsSuccess}
       />
+      
+      {/* Toast Component */}
+      {ToastComponent}
+      
+      {/* Retry Button for Reorder Errors */}
+      {reorderError && (
+        <div className="fixed bottom-4 right-4 bg-red-500 text-white px-4 py-3 rounded-lg shadow-lg z-50">
+          <div className="flex items-center gap-3">
+            <span className="text-sm font-medium">Failed to save order</span>
+            <button
+              onClick={handleRetryReorder}
+              className="bg-white text-red-500 px-3 py-1 rounded font-medium hover:bg-gray-100 transition-colors"
+            >
+              Retry
+            </button>
+            <button
+              onClick={() => setReorderError(null)}
+              className="text-white hover:text-gray-200 transition-colors"
+            >
+              ✕
+            </button>
+          </div>
+        </div>
+      )}
+
+      {/* Edit Location Modal */}
+      {editModalOpen && selectedLocationForEdit && (
+        <LocationEditModal
+          isOpen={editModalOpen}
+          location={selectedLocationForEdit}
+          tripLocationId={selectedLocationForEdit.tripLocationId}
+          onSave={async (updates, tripNotes) => {
+            try {
+              // Update global location (name, tips)
+              if (Object.keys(updates).length > 0) {
+                await api.updateLocation(selectedLocationForEdit.id, updates)
+              }
+              
+              // Update trip-specific notes if tripLocationId exists
+              if (selectedLocationForEdit.tripLocationId && tripNotes !== undefined) {
+                await api.updateTripLocation(selectedLocationForEdit.tripLocationId, {
+                  notes: tripNotes
+                })
+              }
+              
+              // Invalidate cache and reload
+              await Cache.invalidateLocations()
+              await Cache.invalidateTrips()
+              await loadTripLocations()
+              
+              setEditModalOpen(false)
+              setSelectedLocationForEdit(null)
+              showToast('Location updated successfully', 'success')
+            } catch (error) {
+              console.error('Failed to update location:', error)
+              showToast('Failed to update location', 'error')
+            }
+          }}
+          onClose={() => {
+            setEditModalOpen(false)
+            setSelectedLocationForEdit(null)
+          }}
+        />
+      )}
     </div>
   )
 }

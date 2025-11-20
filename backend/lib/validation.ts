@@ -20,6 +20,12 @@ export const updateLocationSchema = z.object({
   userNotes: z.string().optional(),
   userRating: z.number().int().min(1).max(5).optional(),
   isFavorite: z.boolean().optional(),
+  tips: z.array(z.object({
+    text: z.string(),
+    source: z.enum(['highlight', 'context', 'page', 'google_reviews', 'user']),
+    confidence: z.number().min(0).max(1),
+    review_rating: z.number().int().min(1).max(5).optional(),
+  })).optional(),
 })
 
 // Trip validation schemas
@@ -95,5 +101,11 @@ export const updateTripLocationSchema = z.object({
   notes: z.string().optional(),
   priority: z.enum(['must_see', 'normal', 'optional']).optional(),
   status: z.enum(['planned', 'visited', 'skipped']).optional(),
+})
+
+export const reorderTripLocationsSchema = z.object({
+  tripId: z.string().uuid('Invalid trip ID format'),
+  dayNumber: z.number().int().min(1, 'Day number must be at least 1'),
+  locationIds: z.array(z.string().uuid('Invalid location ID format')).min(1, 'At least one location ID is required'),
 })
 

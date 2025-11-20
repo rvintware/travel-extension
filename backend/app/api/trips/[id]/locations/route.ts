@@ -63,7 +63,7 @@ export async function GET(
         timeOfDay: tl.time_of_day,
         suggestedTime: tl.suggested_time,
         estimatedDurationMinutes: tl.estimated_duration_minutes,
-        notes: tl.notes,
+        tripNotes: tl.notes,  // Map notes to tripNotes to match TypeScript interface
         priority: tl.priority,
         status: tl.status,
         addedAt: tl.added_at,

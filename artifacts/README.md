@@ -402,12 +402,6 @@ ViewType =
     ·12  ·4   ·5   ·3      ·0
    ```
 
-5. **Time Estimate**
-   ```
-   ⏱️ 6h 30m total
-   4h activity + 2h 30m travel
-                    😊 Comfortable
-   ```
 
 **Performance Optimization - Caching Strategy:**
 
@@ -811,7 +805,6 @@ popup.tsx (Root)
 │  │
 │  ├─ TripDetail
 │  │  ├─ DayFilter
-│  │  ├─ TimeEstimate
 │  │  └─ LocationCard (multiple)
 │  │
 │  ├─ CreateTripView
