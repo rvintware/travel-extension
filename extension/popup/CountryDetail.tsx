@@ -15,9 +15,10 @@ interface CountryDetailProps {
   onBack: () => void
   onAddToTrip: (location: Location) => void
   onDelete: (location: Location) => void
+  onLocationAddedToTrip?: (tripId: string) => void  // Callback to notify parent when location is added
 }
 
-export function CountryDetail({ country, trips, onBack, onAddToTrip, onDelete }: CountryDetailProps) {
+export function CountryDetail({ country, trips, onBack, onAddToTrip, onDelete, onLocationAddedToTrip }: CountryDetailProps) {
   const [locations, setLocations] = useState<Location[]>([])
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
@@ -94,7 +95,7 @@ export function CountryDetail({ country, trips, onBack, onAddToTrip, onDelete }:
     setAddToTripModalOpen(true)
   }
   
-  async function handleAddToTripSuccess(tripName: string, location: Location) {
+  async function handleAddToTripSuccess(tripId: string, tripName: string, location: Location) {
     // Store pending toast instead of showing immediately
     // Toast will be shown after modal closes (via useEffect)
     // Location is passed from modal (captured before onClose clears state)
@@ -102,6 +103,9 @@ export function CountryDetail({ country, trips, onBack, onAddToTrip, onDelete }:
     setPendingToast({ message: `Added to ${tripName}`, type: 'success' })
     // NOTE: Do NOT call onAddToTrip(location) here - it opens a second modal in popup.tsx
     // The API call and cache invalidation are already handled in AddToTripModal.handleTripClick
+    
+    // Notify parent to optimistically update trips array
+    onLocationAddedToTrip?.(tripId)
   }
   
   async function handleAlreadyInTrip(tripName: string) {

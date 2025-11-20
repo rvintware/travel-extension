@@ -536,16 +536,25 @@ Rationale: Pencil icon indicates editing, distinguishes from app settings (⚙�
      │                           │
      │ ☑ Set as active trip      │
      │                           │
-     │ Countries                 │
-     │ ┌───────────────────────┐ │
-     │ │ ☑ 🇹🇭 Thailand        │ │
-     │ │ ☑ 🇸🇬 Singapore       │ │
-     │ │ ☑ 🇲🇾 Malaysia        │ │
-     │ └───────────────────────┘ │
-     │                           │
      │ ┌─────────┐ ┌───────────┐│
      │ │ Cancel  │ │   Save    ││
      │ └─────────┘ └───────────┘│
+     │                           │
+     │ ─────────────────────────  │ ← border-t-2 border-red-200
+     │                           │
+     │ ⚠️ Danger Zone             │
+     │ ┌───────────────────────┐ │
+     │ │ Delete Trip            │ │
+     │ │ This will permanently  │ │
+     │ │ delete this trip and    │ │
+     │ │ all its scheduled       │ │
+     │ │ locations. Locations    │ │
+     │ │ will remain in your     │ │
+     │ │ library.                │ │
+     │ │ Cannot be undone!       │ │
+     │ │                         │ │
+     │ │ [🗑️ Delete Trip]       │ │ ← variant="danger"
+     │ └───────────────────────┘ │
      └───────────────────────────┘
 
 VALIDATION WARNINGS:

@@ -21,9 +21,10 @@ interface TripDetailProps {
   onLocationUnscheduled?: () => void
   onTripUpdated?: (trip: Trip) => void  // Callback when trip is updated
   onLocationClick?: (location: LocationWithTripData) => void  // NEW - for navigation to detail view
+  onTripDeleted?: (tripId: string) => void  // Callback when trip is deleted
 }
 
-export function TripDetail({ trip, onBack, onLocationMoved, onLocationRemoved, onLocationLinked, onLocationUnscheduled, onTripUpdated, onLocationClick }: TripDetailProps) {
+export function TripDetail({ trip, onBack, onLocationMoved, onLocationRemoved, onLocationLinked, onLocationUnscheduled, onTripUpdated, onLocationClick, onTripDeleted }: TripDetailProps) {
   const [locations, setLocations] = useState<LocationWithTripData[]>([])
   const [byDay, setByDay] = useState<Record<string | number, LocationWithTripData[]>>({})
   const [selectedDay, setSelectedDay] = useState<number | 'all' | 'unscheduled'>('all')
@@ -652,6 +653,7 @@ export function TripDetail({ trip, onBack, onLocationMoved, onLocationRemoved, o
         trip={currentTrip}
         onClose={() => setSettingsOpen(false)}
         onSuccess={handleSettingsSuccess}
+        onTripDeleted={onTripDeleted}
       />
       
       {/* Toast Component */}
