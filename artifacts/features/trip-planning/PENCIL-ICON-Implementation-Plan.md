@@ -101,7 +101,6 @@ Change the settings cog (⚙️) icon to a pencil (✏️) icon in the trip deta
 │ Southeast Asia 2025                 │ ← text-lg, semibold
 │ (text-sm, gray-600)                 │
 │ 3 Countries · 18 locations          │
-│ 🗺️ Map View                         │
 │                        📤 Export    │
 ├─────────────────────────────────────┤
 │ (Day Filters...)                    │

@@ -15,6 +15,15 @@ export async function GET(
   try {
     const { id } = await params
     
+    // Get trip details to know duration_days
+    const { data: trip, error: tripError } = await supabase
+      .from('trips')
+      .select('duration_days')
+      .eq('id', id)
+      .single()
+    
+    if (tripError) throw tripError
+    
     const { data, error } = await supabase
       .from('trip_locations')
       .select(`
@@ -31,6 +40,15 @@ export async function GET(
     // Group locations by day
     const byDay: Record<string | number, any[]> = {}
     const allLocations: any[] = []
+    
+    // Initialize empty arrays for all days if trip has duration set
+    if (trip?.duration_days) {
+      for (let day = 1; day <= trip.duration_days; day++) {
+        byDay[day] = []
+      }
+    }
+    // Always initialize unscheduled
+    byDay['unscheduled'] = []
     
     data.forEach(tl => {
       const dayKey = tl.day_number ?? 'unscheduled'

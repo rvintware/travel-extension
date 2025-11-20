@@ -420,6 +420,7 @@ function IndexPopup() {
       return (
         <CountryDetail
           country={selectedCountry}
+          trips={trips}
           onBack={handleBackToList}
           onAddToTrip={handleAddToTrip}
           onDelete={handleLocationDeleted}

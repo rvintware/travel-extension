@@ -1,27 +1,29 @@
 import React, { useState, useEffect } from 'react'
-import type { Country, Location } from '../lib/types'
+import type { Country, Location, Trip } from '../lib/types'
 import { LocationCard } from '../components/LocationCard'
 import type { GearAction } from '../components/GearMenu'
-import { ConfirmDialog } from '../components/ConfirmDialog'
+import { AddToTripModal } from '../components/AddToTripModal'
+import { useToast } from '../components/Toast'
 import * as api from '../lib/api'
 import { getUserId } from '../lib/storage'
 import { Cache } from '../lib/cache'
 
 interface CountryDetailProps {
   country: Country
+  trips: Trip[]  // Pass trips array for Add to Trip modal
   onBack: () => void
   onAddToTrip: (location: Location) => void
   onDelete: (location: Location) => void
 }
 
-export function CountryDetail({ country, onBack, onAddToTrip, onDelete }: CountryDetailProps) {
+export function CountryDetail({ country, trips, onBack, onAddToTrip, onDelete }: CountryDetailProps) {
   const [locations, setLocations] = useState<Location[]>([])
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
-  const [confirmDialog, setConfirmDialog] = useState<{
-    isOpen: boolean
-    location: Location | null
-  }>({ isOpen: false, location: null })
+  const [addToTripModalOpen, setAddToTripModalOpen] = useState(false)
+  const [selectedLocation, setSelectedLocation] = useState<Location | null>(null)
+  const [pendingToast, setPendingToast] = useState<{ message: string; type: 'success' | 'info' } | null>(null)
+  const { showToast, ToastComponent } = useToast()
   
   useEffect(() => {
     loadLocations()
@@ -81,42 +83,56 @@ export function CountryDetail({ country, onBack, onAddToTrip, onDelete }: Countr
     }
   }
   
-  const handleAction = async (location: Location, action: GearAction) => {
-    switch (action) {
-      case 'add-to-trip':
-        onAddToTrip(location)
-        break
-      
-      case 'edit':
-        // TODO: Open edit modal
-        console.log('Edit location:', location.id)
-        break
-      
-      case 'delete':
-        // Show confirm dialog
-        setConfirmDialog({ isOpen: true, location })
-        break
-    }
+  function handleAddToTripClick(location: Location) {
+    setSelectedLocation(location)
+    setAddToTripModalOpen(true)
   }
   
-  async function handleConfirmDelete() {
-    if (!confirmDialog.location) return
-    
-    const locationToDelete = confirmDialog.location
-    
+  async function handleAddToTripSuccess(tripName: string, location: Location) {
+    // Store pending toast instead of showing immediately
+    // Toast will be shown after modal closes (via useEffect)
+    // Location is passed from modal (captured before onClose clears state)
+    setSelectedLocation(null)
+    setPendingToast({ message: `Added to ${tripName}`, type: 'success' })
+    // NOTE: Do NOT call onAddToTrip(location) here - it opens a second modal in popup.tsx
+    // The API call and cache invalidation are already handled in AddToTripModal.handleTripClick
+  }
+  
+  async function handleAlreadyInTrip(tripName: string) {
+    // Store pending toast instead of showing immediately
+    // Toast will be shown after modal closes (via useEffect)
+    setSelectedLocation(null)
+    setPendingToast({ message: `Already in ${tripName}`, type: 'info' })
+  }
+  
+  // Watch for modal closing and show pending toast
+  useEffect(() => {
+    // When modal closes and there's a pending toast, show it
+    if (!addToTripModalOpen && pendingToast) {
+      // Use requestAnimationFrame to ensure modal has fully unmounted
+      requestAnimationFrame(() => {
+        requestAnimationFrame(() => {
+          showToast(pendingToast.message, pendingToast.type)
+          setPendingToast(null)
+        })
+      })
+    }
+  }, [addToTripModalOpen, pendingToast, showToast])
+  
+  async function handleDelete(location: Location) {
     try {
       // STEP 1: Perform API call
-      await api.deleteLocation(locationToDelete.id)
+      await api.deleteLocation(location.id)
       
       // STEP 2: OPTIMISTIC UPDATE - Remove location immediately (0ms blocking)
-      setLocations(prev => prev.filter(l => l.id !== locationToDelete.id))
+      setLocations(prev => prev.filter(l => l.id !== location.id))
       
       // STEP 3: Invalidate caches (counts changed)
       await Cache.invalidateTrips()
       await Cache.invalidateLocations()
       
       // STEP 4: Notify parent via callback (instant, ~0ms)
-      onDelete(locationToDelete)
+      onDelete(location)
       
       // STEP 5: Background refresh to verify (non-blocking)
       loadLocations().catch(error => {
@@ -124,13 +140,10 @@ export function CountryDetail({ country, onBack, onAddToTrip, onDelete }: Countr
         console.error('Refresh failed:', error)
         loadLocations() // Get real state from server
       })
-      
-      setConfirmDialog({ isOpen: false, location: null })
     } catch (error) {
       console.error('Failed to delete:', error)
       // On API error, refresh to get real state
       loadLocations()
-      setConfirmDialog({ isOpen: false, location: null })
     }
   }
   
@@ -149,11 +162,12 @@ export function CountryDetail({ country, onBack, onAddToTrip, onDelete }: Countr
           
           <button 
             onClick={handleRefresh}
-            className="text-gray-600 hover:text-primary transition-colors"
+            className="p-2 text-gray-600 hover:text-primary hover:bg-gray-100 rounded transition-colors"
             disabled={refreshing}
-            title="Refresh"
+            title="Refresh data"
+            aria-label="Refresh"
           >
-            <span className={refreshing ? 'animate-spin' : ''}>🔄</span>
+            <span className={`text-xl ${refreshing ? 'animate-spin' : ''}`}>🔄</span>
           </button>
         </div>
         <div className="flex items-center gap-2">
@@ -187,26 +201,31 @@ export function CountryDetail({ country, onBack, onAddToTrip, onDelete }: Countr
                 key={location.id}
                 location={location}
                 context="library"
-                onAction={(action, data) => handleAction(location, action)}
+                onAction={() => {}} // Not used in library context anymore
+                onAddToTrip={() => handleAddToTripClick(location)}
+                onDelete={() => handleDelete(location)}
               />
             ))}
           </div>
         )}
       </div>
       
-      {/* Confirm Delete Dialog */}
-      <ConfirmDialog
-        isOpen={confirmDialog.isOpen}
-        title="Delete Location?"
-        message={confirmDialog.location 
-          ? `Delete "${confirmDialog.location.name}" permanently? This removes it from all trips and your library.`
-          : ''
-        }
-        confirmText="Delete"
-        confirmVariant="danger"
-        onConfirm={handleConfirmDelete}
-        onCancel={() => setConfirmDialog({ isOpen: false, location: null })}
-      />
+      {/* Add to Trip Modal */}
+      {addToTripModalOpen && selectedLocation && (
+        <AddToTripModal
+          location={selectedLocation}
+          trips={trips}
+          onClose={() => {
+            setAddToTripModalOpen(false)
+            setSelectedLocation(null)
+          }}
+          onSuccess={handleAddToTripSuccess}
+          onAlreadyInTrip={handleAlreadyInTrip}
+        />
+      )}
+      
+      {/* Toast */}
+      {ToastComponent}
     </div>
   )
 }

@@ -483,7 +483,6 @@ User sets Duration = 3
 │ (text-sm, gray-600)                 │
 │ 3 Countries · 18 locations          │
 │ Nov 1 - Nov 5                       │ ← Dates display
-│ 🗺️ Map View                         │
 │                        📤 Export    │
 ├─────────────────────────────────────┤
 │ (Day Filters...)                    │

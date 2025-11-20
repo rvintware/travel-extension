@@ -9,6 +9,7 @@ import {
   calculateEndDate,
   formatDateForAPI
 } from '../lib/dateUtils'
+import { setDefaultTrip, getSettings } from '../lib/storage'
 
 interface TripSettingsModalProps {
   isOpen: boolean
@@ -143,6 +144,23 @@ export function TripSettingsModal({
         endDate: endDate ? formatDateForAPI(endDate) : undefined,
         durationDays: duration ? parseInt(duration) : undefined,
         isActive
+      })
+      
+      // Sync active trip status with settings.defaultTripId
+      if (isActive) {
+        await setDefaultTrip(trip.id)
+      } else {
+        // If this trip was active and is being deactivated, clear defaultTripId
+        // (user can set a new default in Settings)
+        const currentSettings = await getSettings()
+        if (currentSettings?.defaultTripId === trip.id) {
+          await setDefaultTrip(null)
+        }
+      }
+      
+      // Notify background worker to refresh context menu
+      chrome.runtime.sendMessage({ type: 'TRIP_UPDATED' }).catch(() => {
+        // Background worker not ready, that's fine
       })
       
       onSuccess(updated)
