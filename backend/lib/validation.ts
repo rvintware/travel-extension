@@ -87,7 +87,7 @@ export const linkLocationToTripSchema = z.object({
 })
 
 export const updateTripLocationSchema = z.object({
-  dayNumber: z.number().int().min(1).optional(),
+  dayNumber: z.number().int().min(1).nullable().optional(),
   displayOrder: z.number().int().min(0).optional(),
   timeOfDay: z.enum(['morning', 'afternoon', 'evening']).optional(),
   suggestedTime: z.string().optional(),

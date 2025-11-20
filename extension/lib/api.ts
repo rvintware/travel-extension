@@ -234,52 +234,6 @@ export async function getTripLocations(tripId: string) {
 }
 
 /**
- * Get map data for a trip (optimized for map rendering)
- */
-export async function getMapData(tripId: string) {
-  const response = await fetch(`${API_URL}/api/trips/${tripId}/map-data`)
-  const data = await handleResponse<{
-    tripId: string
-    locations: Array<{
-      id: string
-      tripLocationId: string
-      name: string
-      lat: number | null
-      lng: number | null
-      address: string
-      category: string | null
-      subcategory: string | null
-      photos: any[]
-      placeId: string | null
-      userRating: number | null
-      summary: string | null
-      dayNumber: number | null
-      displayOrder: number
-      timeOfDay: string | null
-      suggestedTime: string | null
-      estimatedDuration: number | null
-      notes: string | null
-      priority: string | null
-      status: string
-    }>
-    locationsWithCoordinates: number
-    bounds: {
-      north: number
-      south: number
-      east: number
-      west: number
-    } | null
-    stats: {
-      totalLocations: number
-      withCoordinates: number
-      byDay: Record<number, number>
-      byCategory: Record<string, number>
-    }
-  }>(response)
-  return data
-}
-
-/**
  * Link a location to a trip
  */
 export async function linkLocationToTrip(data: {
@@ -391,6 +345,29 @@ export async function exportTrip(tripId: string): Promise<{
   
   console.log('[API] Export successful, filename:', data.filename)
   return data
+}
+
+/**
+ * Update a trip location (assign day, edit notes)
+ * PATCH /api/trip-locations/:id
+ */
+export async function updateTripLocation(
+  tripLocationId: string,
+  updates: { dayNumber?: number | null; notes?: string }
+) {
+  console.log('[API] Updating trip location:', tripLocationId, updates)
+  
+  const response = await fetch(`${API_URL}/api/trip-locations/${tripLocationId}`, {
+    method: 'PATCH',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      dayNumber: updates.dayNumber,
+      notes: updates.notes,
+    })
+  })
+  const data = await handleResponse<{ tripLocation: any }>(response)
+  console.log('[API] Trip location updated:', data.tripLocation.id)
+  return data.tripLocation
 }
 
 /**

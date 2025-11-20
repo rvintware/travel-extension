@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react'
 import type { Country, Trip } from '../lib/types'
 import { Button } from '../components/Button'
 import { DatePickerField } from '../components/DatePickerField'
-import { getUserId } from '../lib/storage'
+import { getUserId, setDefaultTrip } from '../lib/storage'
 import * as api from '../lib/api'
 import { 
   calculateDuration, 
@@ -59,8 +59,8 @@ export function CreateTripView({ countries, onBack, onSuccess }: CreateTripViewP
       if (!isNaN(durationNum) && durationNum > 0) {
         const calculated = calculateStartDate(endDate, durationNum)
         setStartDate(calculated)
-      }
     }
+  }
   }, [endDate, duration, startDate, isDurationLocked])
   
   function handleDurationChange(value: string) {
@@ -94,6 +94,16 @@ export function CreateTripView({ countries, onBack, onSuccess }: CreateTripViewP
         endDate: endDate ? formatDateForAPI(endDate) : undefined,
         durationDays: duration ? parseInt(duration) : undefined,
         isActive: setAsActive
+      })
+      
+      // Sync active trip status with settings.defaultTripId
+      if (setAsActive) {
+        await setDefaultTrip(trip.id)
+      }
+      
+      // Notify background worker to refresh context menu
+      chrome.runtime.sendMessage({ type: 'TRIP_UPDATED' }).catch(() => {
+        // Background worker not ready, that's fine
       })
       
       // STEP 2: Notify parent via callback (optimistic update handled in parent)
@@ -162,21 +172,21 @@ export function CreateTripView({ countries, onBack, onSuccess }: CreateTripViewP
               onChange={setEndDate}
               minDate={startDate || undefined}
             />
-          </div>
-          
+        </div>
+        
           {/* Duration Field */}
-          <div>
-            <label className="block text-sm font-semibold text-gray-900 mb-2">
+        <div>
+          <label className="block text-sm font-semibold text-gray-900 mb-2">
               Duration
-            </label>
-            <div className="flex items-center gap-2">
+          </label>
+          <div className="flex items-center gap-2">
               <div className="relative">
-                <input
-                  type="number"
-                  value={duration}
+            <input
+              type="number"
+              value={duration}
                   onChange={(e) => handleDurationChange(e.target.value)}
                   placeholder="5"
-                  min="1"
+              min="1"
                   className={`w-24 px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-primary ${
                     isDurationLocked ? 'bg-gray-100' : ''
                   }`}
@@ -187,7 +197,7 @@ export function CreateTripView({ countries, onBack, onSuccess }: CreateTripViewP
                   </span>
                 )}
               </div>
-              <span className="text-sm text-gray-600">days</span>
+            <span className="text-sm text-gray-600">days</span>
             </div>
             {isDurationLocked && (
               <p className="text-xs text-gray-500 mt-1">

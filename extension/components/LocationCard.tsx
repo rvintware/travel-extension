@@ -1,16 +1,21 @@
-import React from 'react'
+import React, { useState } from 'react'
 import type { Location, LocationWithTripData, TipObject } from '../lib/types'
 import { formatRelativeTime, getDomain, getSourceEmoji } from '../lib/utils'
 import { GearMenu, type GearAction } from './GearMenu'
+import { KebabMenu, type KebabMenuOption } from './KebabMenu'
+import { DeletePill } from './DeletePill'
 
 interface LocationCardProps {
   location: Location | LocationWithTripData
   context: 'library' | 'trip'
   days?: number[]
   onAction: (action: GearAction, data?: any) => void
+  onDelete?: () => void
+  onAddToTrip?: () => void  // For library context
 }
 
-export function LocationCard({ location, context, days, onAction }: LocationCardProps) {
+export function LocationCard({ location, context, days, onAction, onDelete, onAddToTrip }: LocationCardProps) {
+  const [showDeletePill, setShowDeletePill] = useState(false)
   const domain = getDomain(location.source_url)
   const emoji = getSourceEmoji(location.source_url)
   
@@ -28,7 +33,14 @@ export function LocationCard({ location, context, days, onAction }: LocationCard
     (hasContext || isRecent)
   
   return (
-    <div className="bg-white border border-gray-300 rounded-lg overflow-hidden shadow-card hover:shadow-card-hover transition-shadow duration-200">
+    <div className="bg-white border border-gray-300 rounded-lg overflow-hidden shadow-card hover:shadow-card-hover transition-shadow duration-200 relative">
+      {/* Day Badge (trip context only, when assigned to a day) */}
+      {context === 'trip' && tripData?.dayNumber && (
+        <div className="absolute top-3 right-3 bg-primary text-white px-2 py-1 rounded-full text-xs font-medium z-10">
+          Day {tripData.dayNumber}
+        </div>
+      )}
+      
       {/* Processing Banner */}
       {shouldShowProcessing && (
         <div className="bg-blue-50 border-b border-blue-200 px-4 py-2">
@@ -65,16 +77,25 @@ export function LocationCard({ location, context, days, onAction }: LocationCard
       
       {/* Content */}
       <div className="p-4">
-        {/* Header with Name and Gear */}
+        {/* Header with Name and Menu */}
         <div className="flex items-start justify-between gap-2 mb-3">
           <h3 className="text-xl font-semibold text-gray-900 flex-1">
             {location.name}
           </h3>
-          <GearMenu
-            context={context}
-            days={days}
-            onAction={onAction}
-          />
+          {context === 'trip' ? (
+            <KebabMenu
+              options={buildKebabMenuOptions()}
+              currentDay={tripData?.dayNumber || null}
+              onAction={(optionId, data) => {
+                if (optionId === 'assign-day') {
+                  // data is the day number string or 'null' for unassigned
+                  onAction('move-to-day', data === 'null' ? null : parseInt(data))
+                } else if (optionId === 'edit-notes') {
+                  onAction('edit', null)
+                }
+              }}
+            />
+          ) : null}
         </div>
         
         {/* Metadata Section */}
@@ -138,7 +159,7 @@ export function LocationCard({ location, context, days, onAction }: LocationCard
         )}
         
         {/* Footer - Source */}
-        <div className="border-t border-gray-200 pt-3">
+        <div className="border-t border-gray-200 pt-3 relative">
           <a
             href={location.source_url}
             target="_blank"
@@ -152,10 +173,101 @@ export function LocationCard({ location, context, days, onAction }: LocationCard
           <div className="text-xs text-gray-500 mt-1">
             Saved {formatRelativeTime(new Date(location.created_at).getTime())}
           </div>
+          
+          {/* Library Context: Add to Trip Button */}
+          {context === 'library' && onAddToTrip && (
+            <div className="mt-3 flex items-center justify-between">
+              <button
+                onClick={onAddToTrip}
+                className="bg-primary text-white px-4 py-2 rounded-lg font-medium hover:bg-primary-dark transition-colors"
+              >
+                Add to Trip
+              </button>
+              
+              {/* Delete Bin Icon or Pill - positioned inline, replacing trash bin */}
+          {!showDeletePill && onDelete && (
+            <button
+              onClick={() => setShowDeletePill(true)}
+                  className="text-xl text-gray-400 hover:text-red-500 transition-colors"
+              title="Delete"
+            >
+              🗑️
+            </button>
+          )}
+              {showDeletePill && onDelete && (
+                <DeletePill
+                  onConfirm={() => {
+                    setShowDeletePill(false)
+                    onDelete()
+                  }}
+                  onCancel={() => setShowDeletePill(false)}
+                  position="inline"
+                />
+              )}
+            </div>
+          )}
+          
+          {/* Trip Context: Delete Bin Icon or Pill */}
+          {context === 'trip' && (
+            <>
+              {!showDeletePill && onDelete && (
+                <button
+                  onClick={() => setShowDeletePill(true)}
+                  className="absolute bottom-4 right-4 text-xl text-gray-400 hover:text-red-500 transition-colors"
+                  title="Remove from trip"
+                >
+                  🗑️
+                </button>
+              )}
+          {showDeletePill && onDelete && (
+            <DeletePill
+              onConfirm={() => {
+                setShowDeletePill(false)
+                onDelete()
+              }}
+              onCancel={() => setShowDeletePill(false)}
+              position="bottom-right"
+            />
+              )}
+            </>
+          )}
         </div>
       </div>
     </div>
   )
+  
+  // Helper function to build kebab menu options for trip context
+  function buildKebabMenuOptions(): KebabMenuOption[] {
+    const options: KebabMenuOption[] = []
+    
+    // Assign to Day option with submenu
+    if (days && days.length > 0) {
+      options.push({
+        id: 'assign-day',
+        label: 'Assign to Day',
+        icon: '📅',
+        submenu: [
+          ...days.map(day => ({
+            id: day.toString(),
+            label: `Day ${day}`,
+          })),
+          {
+            id: 'null',
+            label: 'Unassigned',
+          }
+        ]
+      })
+    }
+    
+    // Edit Notes option
+    options.push({
+      id: 'edit-notes',
+      label: 'Edit Notes',
+      icon: '📝',
+    })
+    
+    return options
+  }
 }
 
 /**

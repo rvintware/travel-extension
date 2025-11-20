@@ -10,7 +10,6 @@
     "package": "plasmo package"
   },
   "dependencies": {
-    "@googlemaps/js-api-loader": "1.16.8",
     "plasmo": "0.90.5",
     "react": "18.2.0",
     "react-datepicker": "^4.25.0",
@@ -19,7 +18,6 @@
   "devDependencies": {
     "@ianvs/prettier-plugin-sort-imports": "4.1.1",
     "@types/chrome": "0.0.258",
-    "@types/google.maps": "^3.58.1",
     "@types/node": "20.11.5",
     "@types/react": "18.2.48",
     "@types/react-dom": "18.2.18",

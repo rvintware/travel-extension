@@ -1,8 +1,8 @@
 # Trip Planning - UI Changes Visual Guide
 
 **Purpose:** Quick visual reference for UI changes during implementation  
-**Version:** 1.0  
-**Last Updated:** November 17, 2025
+**Version:** 1.1  
+**Last Updated:** December 2025
 
 ---
 
@@ -56,7 +56,7 @@ Duration only
 │ ← Back                         🔄   │
 │ Southeast Asia 2025                 │
 │ 3 Countries · 18 locations          │
-│ 🗺️ Map View · 📤 Export            │
+│                        📤 Export    │
 └─────────────────────────────────────┘
 ```
 
@@ -67,7 +67,6 @@ Duration only
 │ Southeast Asia 2025                 │
 │ 3 Countries · 18 locations          │
 │ Nov 1 - Nov 5                       │ ← Dates display
-│ 🗺️ Map View                         │
 │                        📤 Export    │
 └─────────────────────────────────────┘
 ```
@@ -536,6 +535,153 @@ Slow Actions (300ms+):
 - [ ] All error handling
 - [ ] Performance testing
 - [ ] Accessibility testing
+
+---
+
+## 13. Bug Fixes & Polish (December 2025)
+
+### Fix 1: AddToTripModal Closing Behavior
+
+**Issue:** Modal stayed open after selecting a trip, toast appeared behind modal.
+
+**Fix:** Modal now closes immediately before toast appears.
+
+```
+BEFORE:
+Click trip → Toast shows → Modal still visible ❌
+
+AFTER:
+Click trip → Modal closes → Toast appears ✅
+```
+
+**Implementation:** Added `onClose()` call before `onSuccess()` callback with 100ms delay.
+
+---
+
+### Fix 2: DeletePill Positioning in Library View
+
+**Issue:** DeletePill appeared in bottom-right corner, not inline with "Add to Trip" button.
+
+**Fix:** DeletePill now appears inline, replacing trash bin position.
+
+```
+BEFORE:
+┌─────────────────────────────┐
+│ Location Name               │
+│                             │
+│ [Add to Trip]         🗑️   │
+│                    [✅][❌] │ ← Far away
+└─────────────────────────────┘
+
+AFTER:
+┌─────────────────────────────┐
+│ Location Name               │
+│                             │
+│ [Add to Trip]  [✅][❌]     │ ← Inline!
+└─────────────────────────────┘
+```
+
+**Implementation:** Added `position="inline"` option to DeletePill component.
+
+---
+
+### Fix 3: TripCard Spacing Improvements
+
+**Issue:** Text was squished together, poor readability.
+
+**Fix:** Improved spacing with flex-wrap and gap-4.
+
+```
+BEFORE:
+┌─────────────────────────────┐
+│ Trip Name            [2]    │
+│ Active·1 country·5 days    │ ← Squished
+│ ·Nov 1 - Nov 5              │
+│                    saved     │
+└─────────────────────────────┘
+
+AFTER:
+┌─────────────────────────────┐
+│ Trip Name            [2]    │
+│                             │
+│ Active · 1 country · 5 days│ ← Better spacing
+│ · Nov 1 - Nov 5             │
+│                             │
+│                    saved     │
+└─────────────────────────────┘
+```
+
+**Implementation:** Added `gap-4`, `min-w-0`, `flex-wrap`, and `mb-2` spacing.
+
+---
+
+### Fix 4: KebabMenu Submenu Scrolling
+
+**Issue:** Submenu for "Assign to Day" was cut off when trip had many days.
+
+**Fix:** Added max-height and overflow-y-auto to submenu.
+
+```
+BEFORE:
+┌─────────────────┐
+│ Assign to Day ›│
+│   D1            │
+│   D2            │
+│   D3            │ ← Cut off!
+└─────────────────┘
+
+AFTER:
+┌─────────────────┐
+│ Assign to Day ›│
+│   D1            │
+│   D2            │
+│   D3            │ ← Scrollable!
+│   D4            │
+│   D5            │
+│   ...           │
+│   [scroll]      │
+└─────────────────┘
+```
+
+**Implementation:** Added `max-h-[200px] overflow-y-auto` classes.
+
+---
+
+### Fix 5: Refresh Button Size Consistency
+
+**Issue:** Refresh button in TripDetail was smaller than in Tabs component.
+
+**Fix:** Matched button styling to Tabs component.
+
+```
+BEFORE:
+Tabs:     [🔄] (p-2, text-xl)
+TripDetail: 🔄 (text-xl only) ❌
+
+AFTER:
+Tabs:     [🔄] (p-2, text-xl)
+TripDetail: [🔄] (p-2, text-xl) ✅
+```
+
+**Implementation:** Added `p-2` padding and `hover:bg-gray-100 rounded` classes.
+
+---
+
+### Fix 6: Active Trip Sync
+
+**Issue:** Trip marked as active (`is_active=true`) but UI showed "No active trip selected".
+
+**Fix:** Synced `trip.is_active` with `settings.defaultTripId`.
+
+**Behavior:**
+- When trip is set as active → Also update `settings.defaultTripId`
+- When `settings.defaultTripId` is set → Also update `trip.is_active`
+- TripsView checks both sources to determine active trip
+
+**Implementation:**
+- Updated `TripSettingsModal` to sync on save
+- Updated `CreateTripView` to sync on create
+- Updated `TripsView` to check both `settings.defaultTripId` and `trip.is_active`
 
 ---
 

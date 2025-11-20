@@ -118,7 +118,7 @@ export interface LocationWithTripData extends Location {
 // ============================================================================
 
 export interface Message {
-  type: 'SHOW_TOAST' | 'CAPTURES_UPDATED' | 'SETTINGS_UPDATED';
+  type: 'SHOW_TOAST' | 'CAPTURES_UPDATED' | 'SETTINGS_UPDATED' | 'TRIP_UPDATED';
   payload?: any;
 }
 

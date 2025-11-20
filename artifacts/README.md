@@ -227,7 +227,6 @@ Trips:
   PATCH  /api/trips/:id          - Update trip
   DELETE /api/trips/:id          - Delete trip
   GET    /api/trips/:id/locations - Get trip's locations
-  GET    /api/trips/:id/map-data  - Optimized map data
 
 Trip-Location Links:
   POST   /api/trip-locations    - Link location to trip

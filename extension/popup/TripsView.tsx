@@ -19,10 +19,10 @@ export function TripsView({ trips, countries, onTripClick, onNewTrip }: TripsVie
     getSettings().then(setSettings)
   }, [])
   
-  // Find active trip from settings, not trip.is_active flag
+  // Find active trip from settings OR trip.is_active flag (sync both)
   const activeTrip = settings?.defaultTripId 
     ? trips.find(t => t.id === settings.defaultTripId)
-    : null
+    : trips.find(t => t.is_active) || null
   
   if (trips.length === 0) {
     return (

@@ -50,6 +50,15 @@ export async function POST(request: Request) {
     
     if (error) throw error
     
+    // If setting trip as active, deactivate all others for this user
+    if (isActive) {
+      await supabase
+        .from('trips')
+        .update({ is_active: false })
+        .eq('user_id', userId)
+        .neq('id', trip.id)
+    }
+    
     // Add all countries to junction table (only if countries selected)
     if (trip && countryIds.length > 0) {
       const { error: countriesError } = await supabase

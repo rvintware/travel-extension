@@ -3,8 +3,8 @@ import type { Trip, LocationWithTripData } from '../lib/types'
 import { LocationCard } from '../components/LocationCard'
 import { DayFilter } from '../components/DayFilter'
 import { TimeEstimate } from '../components/TimeEstimate'
-import { ConfirmDialog } from '../components/ConfirmDialog'
 import { TripSettingsModal } from '../components/TripSettingsModal'
+import { NotesEditorModal } from '../components/NotesEditorModal'
 import type { GearAction } from '../components/GearMenu'
 import * as api from '../lib/api'
 import { Cache } from '../lib/cache'
@@ -26,11 +26,9 @@ export function TripDetail({ trip, onBack, onLocationMoved, onLocationRemoved, o
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
   const [exporting, setExporting] = useState(false)
-  const [confirmDialog, setConfirmDialog] = useState<{
-    isOpen: boolean
-    location: LocationWithTripData | null
-  }>({ isOpen: false, location: null })
   const [settingsOpen, setSettingsOpen] = useState(false)
+  const [notesEditorOpen, setNotesEditorOpen] = useState(false)
+  const [editingLocation, setEditingLocation] = useState<LocationWithTripData | null>(null)
   const [currentTrip, setCurrentTrip] = useState<Trip>(trip)
   
   // Calculate unique countries count from locations
@@ -102,13 +100,12 @@ export function TripDetail({ trip, onBack, onLocationMoved, onLocationRemoved, o
     }
   }
   
-  // Get unique day numbers
-  const days = Object.keys(byDay)
-    .filter(key => key !== 'unscheduled' && !isNaN(Number(key)))
-    .map(Number)
-    .sort((a, b) => a - b)
+  // Get all days from trip duration (including empty days)
+  const days = currentTrip.duration_days && currentTrip.duration_days > 0
+    ? Array.from({ length: currentTrip.duration_days }, (_, i) => i + 1)
+    : []
   
-  // Get counts for day filter
+  // Get counts for day filter (include all days, even empty ones)
   const counts: Record<string | number, number> = {
     all: locations.length,
     unscheduled: byDay.unscheduled?.length || 0,
@@ -118,8 +115,19 @@ export function TripDetail({ trip, onBack, onLocationMoved, onLocationRemoved, o
   })
   
   // Filter locations based on selected day
+  // When "All" is selected, sort by day number (1, 2, ..., N, then unscheduled)
   const filteredLocations = selectedDay === 'all'
-    ? locations
+    ? [...locations].sort((a, b) => {
+        // Unscheduled locations go last
+        if (a.dayNumber === null && b.dayNumber === null) return 0
+        if (a.dayNumber === null) return 1
+        if (b.dayNumber === null) return -1
+        // Sort by day number, then by display order
+        if (a.dayNumber !== b.dayNumber) {
+          return (a.dayNumber || 0) - (b.dayNumber || 0)
+        }
+        return (a.displayOrder || 0) - (b.displayOrder || 0)
+      })
     : selectedDay === 'unscheduled'
     ? byDay.unscheduled || []
     : byDay[selectedDay] || []
@@ -143,22 +151,6 @@ export function TripDetail({ trip, onBack, onLocationMoved, onLocationRemoved, o
   
   const timeEstimate = calculateTimeEstimate()
   
-  function openMapPopup() {
-    // Get API key from environment (available in extension context)
-    const apiKey = process.env.PLASMO_PUBLIC_GOOGLE_PLACES_API_KEY || ''
-    
-    // TODO: For production, migrate to backend proxy to avoid exposing API key
-    // See: Backend endpoint /api/trips/:id/map-render-config
-    
-    // Open in browser tab instead of popup window to avoid MV3 CSP restrictions
-    chrome.tabs.create({
-      url: chrome.runtime.getURL(
-        `tabs/map.html?tripId=${currentTrip.id}&apiKey=${encodeURIComponent(apiKey)}`
-      ),
-      active: true, // Focus the new tab
-    })
-  }
-  
   const handleAction = async (location: LocationWithTripData, action: GearAction, data?: any) => {
     switch (action) {
       case 'set-time':
@@ -166,21 +158,35 @@ export function TripDetail({ trip, onBack, onLocationMoved, onLocationRemoved, o
         console.log('Set time for:', location.id)
         break
       
+      case 'edit':
+        // Open notes editor modal
+        setEditingLocation(location)
+        setNotesEditorOpen(true)
+        break
+      
       case 'move-to-day':
-        // Move to specific day
+        // Move to specific day (or unschedule if data is null)
         try {
-          // STEP 1: Perform API call (get backend response)
-          const result = await api.linkLocationToTrip({
-            tripId: currentTrip.id,
+          const dayNumber = data === 'null' || data === null ? null : parseInt(data)
+          
+          // STEP 1: Perform API call
+          if (location.tripLocationId) {
+            // Update existing trip location
+            await api.updateTripLocation(location.tripLocationId, { dayNumber })
+          } else {
+            // Link location to trip
+            await api.linkLocationToTrip({
+              tripId: currentTrip.id,
             locationId: location.id,
-            dayNumber: data, // The day number
+              dayNumber: dayNumber || undefined,
           })
+          }
           
           // STEP 2: OPTIMISTIC UPDATE - Update UI immediately (0ms blocking)
           // Update locations array
           setLocations(prev => prev.map(loc => 
             loc.id === location.id
-              ? { ...loc, dayNumber: data }
+              ? { ...loc, dayNumber }
               : loc
           ))
           
@@ -193,11 +199,12 @@ export function TripDetail({ trip, onBack, onLocationMoved, onLocationRemoved, o
                 newByDay[day] = newByDay[day].filter(l => l.id !== location.id)
               }
             })
-            // Add to new day
-            if (!newByDay[data]) {
-              newByDay[data] = []
+            // Add to new day or unscheduled
+            const targetDay = dayNumber ?? 'unscheduled'
+            if (!newByDay[targetDay]) {
+              newByDay[targetDay] = []
             }
-            newByDay[data] = [...newByDay[data], { ...location, dayNumber: data }]
+            newByDay[targetDay] = [...newByDay[targetDay], { ...location, dayNumber }]
             return newByDay
           })
           
@@ -206,7 +213,11 @@ export function TripDetail({ trip, onBack, onLocationMoved, onLocationRemoved, o
           await Cache.invalidateLocations()
           
           // STEP 4: Notify parent via callback (instant, ~0ms)
+          if (dayNumber === null) {
+            onLocationUnscheduled?.()
+          } else {
           onLocationMoved?.()
+          }
           
           // STEP 5: Background refresh to verify (non-blocking)
           loadTripLocations().catch(error => {
@@ -222,33 +233,31 @@ export function TripDetail({ trip, onBack, onLocationMoved, onLocationRemoved, o
         break
       
       case 'unschedule':
-        // Move to unscheduled
+        // Move to unscheduled - same logic as move-to-day with null
         try {
-          // STEP 1: Perform API call (get backend response)
-          const result = await api.linkLocationToTrip({
-            tripId: currentTrip.id,
+          // STEP 1: Perform API call
+          if (location.tripLocationId) {
+            await api.updateTripLocation(location.tripLocationId, { dayNumber: null })
+          } else {
+            await api.linkLocationToTrip({
+              tripId: currentTrip.id,
             locationId: location.id,
-            dayNumber: undefined, // null = unscheduled
+              dayNumber: undefined,
           })
+          }
           
-          // STEP 2: OPTIMISTIC UPDATE - Update UI immediately (0ms blocking)
-          // Update locations array
+          // STEP 2: OPTIMISTIC UPDATE
           setLocations(prev => prev.map(loc => 
-            loc.id === location.id
-              ? { ...loc, dayNumber: null }
-              : loc
+            loc.id === location.id ? { ...loc, dayNumber: null } : loc
           ))
           
-          // Update byDay grouping optimistically
           setByDay(prev => {
             const newByDay = { ...prev }
-            // Remove from old day
             Object.keys(newByDay).forEach(day => {
               if (newByDay[day]) {
                 newByDay[day] = newByDay[day].filter(l => l.id !== location.id)
               }
             })
-            // Add to unscheduled
             if (!newByDay.unscheduled) {
               newByDay.unscheduled = []
             }
@@ -256,51 +265,45 @@ export function TripDetail({ trip, onBack, onLocationMoved, onLocationRemoved, o
             return newByDay
           })
           
-          // STEP 3: Invalidate relevant caches
+          // STEP 3: Invalidate caches
           await Cache.invalidateTrips()
           await Cache.invalidateLocations()
           
-          // STEP 4: Notify parent via callback (instant, ~0ms)
+          // STEP 4: Notify parent
           onLocationUnscheduled?.()
           
-          // STEP 5: Background refresh to verify (non-blocking)
+          // STEP 5: Background refresh
           loadTripLocations().catch(error => {
-            // On error, revert optimistic update by refreshing from server
             console.error('Refresh failed:', error)
-            loadTripLocations() // Get real state from server
+            loadTripLocations()
           })
         } catch (error) {
           console.error('Failed to unschedule:', error)
-          // On API error, refresh to get real state
           loadTripLocations()
         }
         break
       
       case 'remove-from-trip':
-        // Show confirm dialog
-        setConfirmDialog({ isOpen: true, location })
+        // Remove from trip (handled by DeletePill in LocationCard)
+        await handleRemoveFromTrip(location)
         break
     }
   }
   
-  async function handleConfirmRemove() {
-    if (!confirmDialog.location) return
-    
-    const locationToRemove = confirmDialog.location
-    
+  async function handleRemoveFromTrip(location: LocationWithTripData) {
     try {
       // STEP 1: Perform API call
-      await api.removeFromTrip(currentTrip.id, locationToRemove.id)
+      await api.removeFromTrip(currentTrip.id, location.id)
       
       // STEP 2: OPTIMISTIC UPDATE - Remove location immediately (0ms blocking)
-      setLocations(prev => prev.filter(loc => loc.id !== locationToRemove.id))
+      setLocations(prev => prev.filter(loc => loc.id !== location.id))
       
       // Update byDay grouping optimistically
       setByDay(prev => {
         const newByDay = { ...prev }
         Object.keys(newByDay).forEach(day => {
           if (newByDay[day]) {
-            newByDay[day] = newByDay[day].filter(l => l.id !== locationToRemove.id)
+            newByDay[day] = newByDay[day].filter(l => l.id !== location.id)
           }
         })
         return newByDay
@@ -319,13 +322,51 @@ export function TripDetail({ trip, onBack, onLocationMoved, onLocationRemoved, o
         console.error('Refresh failed:', error)
         loadTripLocations() // Get real state from server
       })
-      
-      setConfirmDialog({ isOpen: false, location: null })
     } catch (error) {
       console.error('Failed to remove from trip:', error)
       // On API error, refresh to get real state
       loadTripLocations()
-      setConfirmDialog({ isOpen: false, location: null })
+    }
+  }
+  
+  async function handleSaveNotes(notes: string) {
+    if (!editingLocation || !editingLocation.tripLocationId) return
+    
+    try {
+      // STEP 1: Perform API call
+      await api.updateTripLocation(editingLocation.tripLocationId, { notes })
+      
+      // STEP 2: OPTIMISTIC UPDATE - Update UI immediately
+      setLocations(prev => prev.map(loc => 
+        loc.id === editingLocation.id
+          ? { ...loc, notes }
+          : loc
+      ))
+      
+      // Update byDay grouping optimistically
+      setByDay(prev => {
+        const newByDay = { ...prev }
+        Object.keys(newByDay).forEach(day => {
+          if (newByDay[day]) {
+            newByDay[day] = newByDay[day].map(l => 
+              l.id === editingLocation.id ? { ...l, notes } : l
+            )
+          }
+        })
+        return newByDay
+      })
+      
+      // STEP 3: Invalidate caches
+      await Cache.invalidateLocations()
+      
+      // STEP 4: Background refresh to verify
+      loadTripLocations().catch(error => {
+        console.error('Refresh failed:', error)
+        loadTripLocations()
+      })
+    } catch (error) {
+      console.error('Failed to save notes:', error)
+      throw error // Let NotesEditorModal handle error display
     }
   }
   
@@ -389,22 +430,23 @@ export function TripDetail({ trip, onBack, onLocationMoved, onLocationRemoved, o
             <span className="font-medium">Back</span>
           </button>
           
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-1">
             <button
               onClick={() => setSettingsOpen(true)}
-              className="text-xl text-gray-600 hover:text-primary transition-colors"
+              className="p-2 text-gray-600 hover:text-primary hover:bg-gray-100 rounded transition-colors"
               title="Edit trip"
             >
-              ✏️
+              <span className="text-xl">✏️</span>
             </button>
-            <button 
-              onClick={handleRefresh}
-              className="text-gray-600 hover:text-primary transition-colors"
-              disabled={refreshing}
-              title="Refresh"
-            >
-              <span className={refreshing ? 'animate-spin' : ''}>🔄</span>
-            </button>
+          <button 
+            onClick={handleRefresh}
+              className="p-2 text-gray-600 hover:text-primary hover:bg-gray-100 rounded transition-colors"
+            disabled={refreshing}
+            title="Refresh"
+              aria-label="Refresh"
+          >
+              <span className={`text-xl ${refreshing ? 'animate-spin' : ''}`}>🔄</span>
+          </button>
           </div>
         </div>
         <div>
@@ -416,14 +458,6 @@ export function TripDetail({ trip, onBack, onLocationMoved, onLocationRemoved, o
               </span>
               <span>·</span>
               <span>{locations.length} {locations.length === 1 ? 'location' : 'locations'}</span>
-              <span>·</span>
-              <button
-                onClick={openMapPopup}
-                className="text-primary hover:text-primary-dark transition-colors flex items-center gap-1 font-medium"
-              >
-                <span>🗺️</span>
-                <span>Map View</span>
-              </button>
             </div>
             {/* Display trip dates if available */}
             {currentTrip.start_date && currentTrip.end_date && (
@@ -447,13 +481,17 @@ export function TripDetail({ trip, onBack, onLocationMoved, onLocationRemoved, o
       </div>
       
       {/* Day Filters */}
-      {days.length > 0 && (
+      {currentTrip.duration_days && currentTrip.duration_days > 0 ? (
         <DayFilter
           days={days}
           counts={counts}
           active={selectedDay}
           onChange={setSelectedDay}
         />
+      ) : (
+        <div className="bg-gray-50 border-b border-gray-200 px-4 py-2 text-sm text-gray-600">
+          💡 Set trip duration in settings to assign locations to days
+        </div>
       )}
       
       {/* Time Estimate (for specific days only) */}
@@ -491,24 +529,22 @@ export function TripDetail({ trip, onBack, onLocationMoved, onLocationRemoved, o
                 context="trip"
                 days={days}
                 onAction={(action, data) => handleAction(location, action, data)}
+                onDelete={() => handleRemoveFromTrip(location)}
               />
             ))}
           </div>
         )}
       </div>
       
-      {/* Confirm Remove Dialog */}
-      <ConfirmDialog
-        isOpen={confirmDialog.isOpen}
-        title="Remove from Trip?"
-        message={confirmDialog.location 
-          ? `Remove "${confirmDialog.location.name}" from this trip? It will remain in your library.`
-          : ''
-        }
-        confirmText="Remove"
-        confirmVariant="danger"
-        onConfirm={handleConfirmRemove}
-        onCancel={() => setConfirmDialog({ isOpen: false, location: null })}
+      {/* Notes Editor Modal */}
+      <NotesEditorModal
+        isOpen={notesEditorOpen}
+        initialNotes={editingLocation?.notes || ''}
+        onSave={handleSaveNotes}
+        onClose={() => {
+          setNotesEditorOpen(false)
+          setEditingLocation(null)
+        }}
       />
       
       {/* Settings Modal */}

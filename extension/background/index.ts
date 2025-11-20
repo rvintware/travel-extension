@@ -1,4 +1,4 @@
-import { getUserId, getSettings, getDefaultTrip } from "../lib/storage"
+import { getUserId, getSettings, setDefaultTrip } from "../lib/storage"
 import * as api from "../lib/api"
 import { Cache } from "../lib/cache"
 
@@ -30,7 +30,7 @@ chrome.runtime.onInstalled.addListener(async () => {
 })
 
 /**
- * Update context menus based on current settings
+ * Update context menus based on current settings and database state
  */
 async function updateContextMenus() {
   try {
@@ -40,28 +40,51 @@ async function updateContextMenus() {
     await chrome.contextMenus.removeAll()
     
     const settings = await getSettings()
-    const defaultTrip = settings?.defaultTripId
+    const defaultTripId = settings?.defaultTripId
     
-    // Show trip menu if default trip is set
-    if (defaultTrip) {
+    // Try to get active trip from settings first
+    let activeTrip = null
+    
+    if (defaultTripId) {
       try {
-        const trip = await api.getTrip(defaultTrip)
-        console.log('[BG] Active trip:', trip.name)
-        
-        chrome.contextMenus.create({
-          id: MENU_ID_TRIP,
-          title: `⭐ Save to ${trip.name}`,
-          contexts: ['selection'],
-        })
+        activeTrip = await api.getTrip(defaultTripId)
+        // Verify trip is actually active in database
+        if (!activeTrip.is_active) {
+          console.warn('[BG] Trip from settings is not active in DB, checking database...')
+          activeTrip = null
+        } else {
+          console.log('[BG] Active trip from settings:', activeTrip.name)
+        }
       } catch (error) {
-        console.error('[BG] Failed to fetch trip:', error)
-        // Fallback to generic save
+        console.warn('[BG] Trip from settings not found, checking database...', error)
+      }
+    }
+    
+    // If no active trip from settings, check database for is_active=true
+    if (!activeTrip) {
+      try {
+        const userId = await getUserId()
+        const trips = await api.getTrips(userId)
+        activeTrip = trips.find(t => t.is_active) || null
+        
+        if (activeTrip) {
+          console.log('[BG] Active trip from database:', activeTrip.name)
+          // Sync settings with database - ensure consistency
+          await setDefaultTrip(activeTrip.id)
+        }
+      } catch (error) {
+        console.error('[BG] Failed to fetch trips from database:', error)
+      }
+    }
+    
+    // Show trip menu if active trip found
+    if (activeTrip) {
         chrome.contextMenus.create({
-          id: MENU_ID_LIBRARY,
-          title: '📍 Save Location',
+        id: MENU_ID_TRIP,
+        title: `⭐ Save to ${activeTrip.name}`,
           contexts: ['selection'],
         })
-      }
+      console.log('[BG] ✅ Context menu created for trip:', activeTrip.name)
     } else {
       // No active trip - show generic save option
       chrome.contextMenus.create({
@@ -69,11 +92,23 @@ async function updateContextMenus() {
         title: '📍 Save Location',
         contexts: ['selection'],
       })
+      console.log('[BG] ✅ Context menu created for library save')
     }
     
     console.log('[BG] ✅ Context menus updated')
   } catch (error) {
     console.error('[BG] Failed to update context menus:', error)
+    // Fallback: create generic save menu
+    try {
+      await chrome.contextMenus.removeAll()
+      chrome.contextMenus.create({
+        id: MENU_ID_LIBRARY,
+        title: '📍 Save Location',
+        contexts: ['selection'],
+      })
+    } catch (fallbackError) {
+      console.error('[BG] Failed to create fallback menu:', fallbackError)
+    }
   }
 }
 
@@ -212,10 +247,10 @@ async function showToast(tabId: number, message: string) {
   }
 }
 
-// Listen for settings updates to refresh context menu
+// Listen for settings and trip updates to refresh context menu
 chrome.runtime.onMessage.addListener((message) => {
-  if (message.type === 'SETTINGS_UPDATED') {
-    console.log('[BG] Settings updated, refreshing context menu')
+  if (message.type === 'SETTINGS_UPDATED' || message.type === 'TRIP_UPDATED') {
+    console.log('[BG] Settings or trip updated, refreshing context menu')
     updateContextMenus()
   }
   return true
