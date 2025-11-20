@@ -40,7 +40,7 @@ export async function GET(
  * Update a location
  * PATCH /api/locations/:id
  * 
- * Body: { name?, category?, summary?, userNotes?, userRating?, isFavorite? }
+ * Body: { name?, category?, summary?, userNotes?, userRating?, isFavorite?, tips? }
  */
 export async function PATCH(
   request: Request,
@@ -62,6 +62,7 @@ export async function PATCH(
     if (validated.userNotes !== undefined) updateData.user_notes = validated.userNotes
     if (validated.userRating !== undefined) updateData.user_rating = validated.userRating
     if (validated.isFavorite !== undefined) updateData.is_favorite = validated.isFavorite
+    if (validated.tips !== undefined) updateData.tips = validated.tips
     
     // Update location
     // @ts-ignore - Supabase types issue with dynamic updates

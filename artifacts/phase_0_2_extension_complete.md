@@ -39,8 +39,6 @@ Complete integration of Chrome extension with Phase 0.2 backend API, implementin
 
 ✅ **Trip Organization**
 - Day-by-day filtering (All, D1, D2, D3, Unscheduled)
-- Time estimates per day
-- Comfort level indicators (😊/😅/😰)
 - Move locations between days
 - Remove from trip vs delete permanently
 
@@ -71,7 +69,6 @@ Complete integration of Chrome extension with Phase 0.2 backend API, implementin
 - `components/CountryCard.tsx` (35 lines) - Country list item
 - `components/TripCard.tsx` (55 lines) - Trip list item
 - `components/DayFilter.tsx` (50 lines) - Day tab filters
-- `components/TimeEstimate.tsx` (65 lines) - Time calculation & comfort level
 - `components/GearMenu.tsx` (95 lines) - Action dropdown
 - `components/AddToTripModal.tsx` (125 lines) - Add to trip dialog
 - `components/Settings.tsx` (150 lines) - Settings panel
@@ -152,9 +149,7 @@ Extension
 1. Open extension → My Trips → "Tokyo 2025"
 2. See locations: 4 on D1, 5 on D2, 3 on D3, 0 unscheduled
 3. Click "Day 2" filter
-4. See time: "8h 30m (6h activity + 2h 30m travel) · 😅 Packed"
-5. Click gear on location → "Move to Day 3"
-6. Day 2 now more comfortable
+4. Click gear on location → "Move to Day 3"
 ```
 
 ---
@@ -183,7 +178,6 @@ Extension
 - Pokemon-style cards (professional, not childish)
 - Maximum 3 bullet points (avoid overwhelm)
 - Quoted tips (build trust)
-- Comfort levels (helpful planning)
 - Simple toasts (just confirmation)
 
 ---
@@ -334,7 +328,6 @@ extension/
 │   ├── CountryCard.tsx              ✅ NEW
 │   ├── TripCard.tsx                 ✅ NEW
 │   ├── DayFilter.tsx                ✅ NEW
-│   ├── TimeEstimate.tsx             ✅ NEW
 │   ├── GearMenu.tsx                 ✅ NEW
 │   ├── AddToTripModal.tsx           ✅ NEW
 │   ├── Settings.tsx                 ✅ NEW
@@ -362,7 +355,6 @@ Phase 0.2 Extension Integration is **COMPLETE**.
 - ✅ Settings panel ready
 - ✅ Pokemon-style cards
 - ✅ Day organization
-- ✅ Time estimates
 
 **Ready for:**
 - Testing with real data

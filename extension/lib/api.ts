@@ -125,6 +125,7 @@ export async function updateLocation(locationId: string, updates: {
   userNotes?: string
   userRating?: number
   isFavorite?: boolean
+  tips?: import('./types').TipObject[]
 }) {
   const response = await fetch(`${API_URL}/api/locations/${locationId}`, {
     method: 'PATCH',
@@ -265,6 +266,23 @@ export async function removeFromTrip(tripId: string, locationId: string) {
     { method: 'DELETE' }
   )
   await handleResponse(response)
+}
+
+/**
+ * Reorder locations within a specific day of a trip
+ */
+export async function reorderTripLocations(
+  tripId: string,
+  dayNumber: number,
+  locationIds: string[]
+): Promise<{ success: boolean; updated: number }> {
+  const response = await fetch(`${API_URL}/api/trip-locations/reorder`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ tripId, dayNumber, locationIds })
+  })
+  const data = await handleResponse<{ success: boolean; updated: number }>(response)
+  return data
 }
 
 /**

@@ -31,6 +31,8 @@ export function DayFilter({ days, counts, active, onChange }: DayFilterProps) {
               : 'bg-white text-gray-700 hover:bg-gray-100 border border-gray-300'
             }
           `}
+          aria-label={tab.key === 'all' ? 'Show all locations' : tab.key === 'unscheduled' ? 'Show unscheduled locations' : `Filter by Day ${tab.key}`}
+          aria-current={active === tab.key ? 'page' : undefined}
         >
           {tab.label}
           <span className={`ml-1 text-xs ${active === tab.key ? 'opacity-80' : 'opacity-60'}`}>

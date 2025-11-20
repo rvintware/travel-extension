@@ -4,10 +4,11 @@ import { TripsView } from "./popup/TripsView"
 import { LocationsView } from "./popup/LocationsView"
 import { CountryDetail } from "./popup/CountryDetail"
 import { TripDetail } from "./popup/TripDetail"
+import { LocationDetailView } from "./popup/LocationDetailView"
 import { CreateTripView } from "./popup/CreateTripView"
 import { Settings } from "./components/Settings"
 import { AddToTripModal } from "./components/AddToTripModal"
-import type { Country, Trip, Location, ViewType } from "./lib/types"
+import type { Country, Trip, Location, LocationWithTripData, ViewType } from "./lib/types"
 import { getUserId, getSettings } from "./lib/storage"
 import { Cache, arraysEqual } from "./lib/cache"
 import * as api from "./lib/api"
@@ -21,6 +22,9 @@ function IndexPopup() {
   const [view, setView] = useState<ViewType>('tripList')
   const [selectedTrip, setSelectedTrip] = useState<Trip | null>(null)
   const [selectedCountry, setSelectedCountry] = useState<Country | null>(null)
+  const [selectedLocation, setSelectedLocation] = useState<LocationWithTripData | null>(null)
+  const [returnToView, setReturnToView] = useState<ViewType>('tripList')
+  const [returnToTripId, setReturnToTripId] = useState<string | undefined>(undefined)
   
   // Data state
   const [countries, setCountries] = useState<Country[]>([])
@@ -208,6 +212,29 @@ function IndexPopup() {
     } else {
       setView('locationList')
     }
+  }
+  
+  function handleLocationClick(location: LocationWithTripData, returnTo?: { view: ViewType; tripId?: string }) {
+    setSelectedLocation(location)
+    setReturnToView(returnTo?.view || 'tripDetail')
+    if (returnTo?.tripId) {
+      setReturnToTripId(returnTo.tripId)
+    }
+    setView('locationDetail')
+  }
+  
+  function handleBackFromLocationDetail() {
+    const returnView = returnToView || 'tripList'
+    setView(returnView)
+    if (returnToTripId) {
+      const trip = trips.find(t => t.id === returnToTripId)
+      if (trip) {
+        setSelectedTrip(trip)
+      }
+    }
+    setSelectedLocation(null)
+    setReturnToView('tripList')
+    setReturnToTripId(undefined)
   }
   
   function handleNewTrip() {
@@ -412,6 +439,7 @@ function IndexPopup() {
           onLocationLinked={handleLocationLinked}
           onLocationUnscheduled={handleLocationUnscheduled}
           onTripUpdated={handleTripUpdated}
+          onLocationClick={(location) => handleLocationClick(location, { view: 'tripDetail', tripId: selectedTrip.id })}
         />
       )
     }
@@ -424,6 +452,22 @@ function IndexPopup() {
           onBack={handleBackToList}
           onAddToTrip={handleAddToTrip}
           onDelete={handleLocationDeleted}
+        />
+      )
+    }
+    
+    if (view === 'locationDetail' && selectedLocation) {
+      return (
+        <LocationDetailView
+          location={selectedLocation}
+          tripLocationId={selectedLocation.tripLocationId}
+          onBack={handleBackFromLocationDetail}
+          onLocationUpdated={() => {
+            // Refresh data when location is updated
+            loadDataWithCache().catch(error => {
+              console.error('Refresh failed:', error)
+            })
+          }}
         />
       )
     }
@@ -441,7 +485,6 @@ function IndexPopup() {
         {activeTab === 'trips' ? (
           <TripsView
             trips={trips}
-            countries={countries}
             onTripClick={handleTripClick}
             onNewTrip={handleNewTrip}
           />

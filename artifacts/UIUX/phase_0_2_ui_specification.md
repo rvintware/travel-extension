@@ -97,8 +97,6 @@
 │  ▔▔▔▔▔                                  │
 │                                         │
 │  Day 1 (4 locations)                    │
-│  ⏱️ 6h 30m total (4h activity + 2h 30m  │
-│     travel) · 😊 Comfortable            │
 │                                         │
 │  ┌───────────────────────────────────┐ │
 │  │ 🍷 Senso-ji Temple           [⚙️] │ │
@@ -132,15 +130,6 @@
 - Stacked layout: Map View and Export on separate lines for better touch targets
 - Export button right-aligned on second line
 
-**Day Summary Formula:**
-```
-⏱️ Xh Xm total (Xh activity + Xh Xm travel) · [Comfort]
-
-Comfort levels:
-- 😊 Comfortable (< 8 hours)
-- 😅 Packed (8-10 hours)
-- 😰 Exhausting (> 10 hours)
-```
 
 **Gear Menu (in trip):**
 ```
@@ -346,7 +335,9 @@ Right-click:
 │ "Third quote if available"        │ <- Tip 3 (max 3!)
 │                                   │
 │ ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━  │
-│ source.com · X time ago           │ <- Footer (12px gray)
+│ source.com →                     │ <- Footer link (12px primary)
+│ 🗺️ View on Maps →                │ <- Google Maps link (if available)
+│ X time ago                        │ <- Timestamp (12px gray)
 └───────────────────────────────────┘
 ```
 
@@ -366,7 +357,9 @@ Right-click:
 │  pagoda"                           │
 │ "Entry is free"                    │
 │ ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━  │
-│ reddit.com · 2 days ago           │
+│ reddit.com →                      │
+│ 🗺️ View on Maps →                │ <- Google Maps link (if available)
+│ 2 days ago                        │
 └───────────────────────────────────┘
 ```
 
@@ -538,7 +531,6 @@ components/
 ├── LocationCard.tsx          - Pokemon-style (enhanced)
 ├── TripCard.tsx              - Trip list item (enhanced)
 ├── DayFilter.tsx             - Day 1, 2, 3 tab filters
-├── TimeEstimate.tsx          - "6h 30m · 😊 Comfortable"
 ├── GearMenu.tsx              - Dropdown action menu
 ├── Settings.tsx              - Settings panel
 └── AddToTripModal.tsx        - Add location to trip
@@ -633,7 +625,6 @@ Open extension → My Trips → Tokyo 2025 →
 - ✅ Can save to trip or library
 - ✅ Can organize library → trips
 - ✅ Can move between days
-- ✅ Time estimates help planning
 - ✅ Settings give control
 
 ---
@@ -645,7 +636,6 @@ Open extension → My Trips → Tokyo 2025 →
 - ✅ Country grouping
 - ✅ Trip organization
 - ✅ Day-by-day scheduling
-- ✅ Time estimates
 - ✅ Pokemon-style cards
 - ✅ Gear menus
 - ✅ Settings panel

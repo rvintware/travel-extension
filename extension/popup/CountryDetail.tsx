@@ -3,6 +3,7 @@ import type { Country, Location, Trip } from '../lib/types'
 import { LocationCard } from '../components/LocationCard'
 import type { GearAction } from '../components/GearMenu'
 import { AddToTripModal } from '../components/AddToTripModal'
+import { LocationEditModal } from '../components/LocationEditModal'
 import { useToast } from '../components/Toast'
 import * as api from '../lib/api'
 import { getUserId } from '../lib/storage'
@@ -21,6 +22,7 @@ export function CountryDetail({ country, trips, onBack, onAddToTrip, onDelete }:
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
   const [addToTripModalOpen, setAddToTripModalOpen] = useState(false)
+  const [editModalOpen, setEditModalOpen] = useState(false)
   const [selectedLocation, setSelectedLocation] = useState<Location | null>(null)
   const [pendingToast, setPendingToast] = useState<{ message: string; type: 'success' | 'info' } | null>(null)
   const { showToast, ToastComponent } = useToast()
@@ -65,6 +67,7 @@ export function CountryDetail({ country, trips, onBack, onAddToTrip, onDelete }:
       setLocations(data)
     } catch (error) {
       console.error('Failed to load locations:', error)
+      showToast('Failed to load locations', 'error')
     } finally {
       setLoading(false)
     }
@@ -78,6 +81,9 @@ export function CountryDetail({ country, trips, onBack, onAddToTrip, onDelete }:
       // Filter to current country
       const filtered = locations.filter(l => l.country_id === country.id)
       setLocations(filtered)
+    } catch (error) {
+      console.error('Failed to refresh locations:', error)
+      showToast('Failed to refresh locations', 'error')
     } finally {
       setRefreshing(false)
     }
@@ -142,6 +148,7 @@ export function CountryDetail({ country, trips, onBack, onAddToTrip, onDelete }:
       })
     } catch (error) {
       console.error('Failed to delete:', error)
+      showToast('Failed to delete location', 'error')
       // On API error, refresh to get real state
       loadLocations()
     }
@@ -149,17 +156,17 @@ export function CountryDetail({ country, trips, onBack, onAddToTrip, onDelete }:
   
   return (
     <div className="flex flex-col h-full">
-      {/* Header */}
-      <div className="bg-white border-b border-gray-200 p-4 flex-shrink-0">
-        <div className="flex items-center justify-between mb-2">
-          <button
-            onClick={onBack}
-            className="flex items-center gap-2 text-primary hover:text-primary-dark transition-colors"
-          >
-            <span>←</span>
-            <span className="font-medium">Back</span>
-          </button>
-          
+      {/* Nav Bar - matches Tabs component structure */}
+      <div className="bg-white border-b border-gray-200 flex items-center justify-between px-2">
+        <button
+          onClick={onBack}
+          className="flex items-center gap-2 text-primary hover:text-primary-dark transition-colors py-3"
+        >
+          <span>←</span>
+          <span className="font-medium">Back</span>
+        </button>
+        
+        <div className="flex items-center gap-1">
           <button 
             onClick={handleRefresh}
             className="p-2 text-gray-600 hover:text-primary hover:bg-gray-100 rounded transition-colors"
@@ -170,6 +177,10 @@ export function CountryDetail({ country, trips, onBack, onAddToTrip, onDelete }:
             <span className={`text-xl ${refreshing ? 'animate-spin' : ''}`}>🔄</span>
           </button>
         </div>
+      </div>
+      
+      {/* Country Info Section */}
+      <div className="bg-white border-b border-gray-200 p-4 flex-shrink-0">
         <div className="flex items-center gap-2">
           <span className="text-2xl">{country.emoji || '🌐'}</span>
           <div>
@@ -201,7 +212,12 @@ export function CountryDetail({ country, trips, onBack, onAddToTrip, onDelete }:
                 key={location.id}
                 location={location}
                 context="library"
-                onAction={() => {}} // Not used in library context anymore
+                onAction={(action, data) => {
+                  if (action === 'edit-location') {
+                    setSelectedLocation(location)
+                    setEditModalOpen(true)
+                  }
+                }}
                 onAddToTrip={() => handleAddToTripClick(location)}
                 onDelete={() => handleDelete(location)}
               />
@@ -221,6 +237,31 @@ export function CountryDetail({ country, trips, onBack, onAddToTrip, onDelete }:
           }}
           onSuccess={handleAddToTripSuccess}
           onAlreadyInTrip={handleAlreadyInTrip}
+        />
+      )}
+      
+      {/* Edit Location Modal */}
+      {editModalOpen && selectedLocation && (
+        <LocationEditModal
+          isOpen={editModalOpen}
+          location={selectedLocation}
+          onSave={async (updates, tripNotes) => {
+            try {
+              await api.updateLocation(selectedLocation.id, updates)
+              await Cache.invalidateLocations()
+              loadLocations()
+              setEditModalOpen(false)
+              setSelectedLocation(null)
+              showToast('Location updated successfully', 'success')
+            } catch (error) {
+              console.error('Failed to update location:', error)
+              showToast('Failed to update location', 'error')
+            }
+          }}
+          onClose={() => {
+            setEditModalOpen(false)
+            setSelectedLocation(null)
+          }}
         />
       )}
       

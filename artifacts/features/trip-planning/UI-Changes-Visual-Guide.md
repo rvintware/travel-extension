@@ -60,14 +60,19 @@ Duration only
 └─────────────────────────────────────┘
 ```
 
-### AFTER (New)
+### AFTER (New - Multiline Layout)
 ```
 ┌─────────────────────────────────────┐
 │ ← Back               ✏️  🔄         │ ← Pencil icon for editing!
-│ Southeast Asia 2025                 │
-│ 3 Countries · 18 locations          │
-│ Nov 1 - Nov 5                       │ ← Dates display
-│                        📤 Export    │
+│  ┌───────────────────────────────┐ │
+│  │ Southeast Asia 2025  Nov 1-5  │ │ ← Line 1: name + dates
+│  │                               │ │
+│  │ 3 Countries                   │ │ ← Line 2: countries count
+│  │                               │ │
+│  │ 18 locations        📤 Export │ │ ← Line 3: locations + export
+│  └───────────────────────────────┘ │ ← bg-gray-50, rounded-lg
+│                                     │
+│  [Day Filters...]                  │
 └─────────────────────────────────────┘
 ```
 
@@ -75,6 +80,11 @@ Duration only
 - ✨ Add pencil icon (✏️) near trip name
 - Opens trip settings modal on click
 - Distinguishes trip editing from app settings (⚙️)
+- ✨ Three-line layout prevents bunching with dynamic values
+- ✨ Each element has dedicated space
+- ✨ Clear visual hierarchy maintained
+- ✨ Better readability when dates/counts change
+- ✨ Export button always properly aligned
 
 ---
 

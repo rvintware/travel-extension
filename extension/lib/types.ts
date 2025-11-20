@@ -35,7 +35,7 @@ export interface Country {
 
 export interface TipObject {
   text: string
-  source: 'highlight' | 'context' | 'page' | 'google_reviews'
+  source: 'highlight' | 'context' | 'page' | 'google_reviews' | 'user'
   confidence: number
   review_rating?: number  // Only for google_reviews
 }
@@ -134,7 +134,7 @@ export interface ToastMessage extends Message {
 // UI STATE TYPES
 // ============================================================================
 
-export type ViewType = 'tripList' | 'tripDetail' | 'createTrip' | 'locationList' | 'countryDetail' | 'settings'
+export type ViewType = 'tripList' | 'tripDetail' | 'createTrip' | 'locationList' | 'countryDetail' | 'locationDetail' | 'settings'
 
 export interface NavigationState {
   view: ViewType;

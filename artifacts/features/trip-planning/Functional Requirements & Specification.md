@@ -479,11 +479,15 @@ User sets Duration = 3
 ┌─────────────────────────────────────┐
 │ ← Back                   ✏️    🔄   │ ← Flex justify-between
 │                                     │    Pencil icon for editing
-│ Southeast Asia 2025                 │ ← text-lg, semibold
-│ (text-sm, gray-600)                 │
-│ 3 Countries · 18 locations          │
-│ Nov 1 - Nov 5                       │ ← Dates display
-│                        📤 Export    │
+│  ┌───────────────────────────────┐ │
+│  │ Southeast Asia 2025  Nov 1-5  │ │ ← Line 1: justify-between
+│  │ (text-lg semibold) (text-sm)  │ │
+│  │                               │ │
+│  │ 3 Countries                   │ │ ← Line 2: left-aligned
+│  │                               │ │
+│  │ 18 locations        📤 Export │ │ ← Line 3: justify-between
+│  └───────────────────────────────┘ │ ← bg-gray-50, rounded-lg, p-3
+│                                     │
 ├─────────────────────────────────────┤
 │ (Day Filters...)                    │
 └─────────────────────────────────────┘

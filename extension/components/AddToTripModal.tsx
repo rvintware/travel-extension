@@ -59,9 +59,10 @@ export function AddToTripModal({ location, trips, onClose, onSuccess, onAlreadyI
           })
         })
       } else {
-        // Other error - close modal
+        // Other error - close modal and show error
         onClose()
         console.error('Failed to add to trip:', error)
+        // Error toast will be handled by parent component
       }
     } finally {
       setLoading(false)

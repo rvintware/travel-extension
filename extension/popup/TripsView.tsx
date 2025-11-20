@@ -1,17 +1,16 @@
 import React, { useState, useEffect } from 'react'
-import type { Trip, Country } from '../lib/types'
+import type { Trip } from '../lib/types'
 import { TripCard } from '../components/TripCard'
 import { Button } from '../components/Button'
 import { getSettings } from '../lib/storage'
 
 interface TripsViewProps {
   trips: Trip[]
-  countries: Country[]
   onTripClick: (trip: Trip) => void
   onNewTrip: () => void
 }
 
-export function TripsView({ trips, countries, onTripClick, onNewTrip }: TripsViewProps) {
+export function TripsView({ trips, onTripClick, onNewTrip }: TripsViewProps) {
   const [settings, setSettings] = useState<any>(null)
   
   // Load settings on mount
@@ -47,68 +46,74 @@ export function TripsView({ trips, countries, onTripClick, onNewTrip }: TripsVie
   }
   
   return (
-    <div className="p-4 space-y-4">
-      {/* Active Trip Selector */}
-      <div>
-        <label className="block text-sm font-medium text-gray-700 mb-2">
-          Active Trip
-        </label>
-        {activeTrip ? (
-          <div className="bg-primary-light border border-primary rounded-lg p-3">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <span className="font-medium text-primary-dark">
-                  {activeTrip.name}
-                </span>
+    <div className="flex flex-col flex-1 min-h-0">
+      {/* Content - Scrollable */}
+      <div className="flex-1 overflow-y-auto min-h-0 p-4 space-y-4">
+        {/* Active Trip Selector */}
+        <div>
+          <label className="block text-sm font-medium text-gray-700 mb-2">
+            Active Trip
+          </label>
+          {activeTrip ? (
+            <div className="bg-primary-light border border-primary rounded-lg p-3">
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-2">
+                  <span className="font-medium text-primary-dark">
+                    {activeTrip.name}
+                  </span>
+                </div>
+                <span className="text-primary">⭐</span>
               </div>
-              <span className="text-primary">⭐</span>
+              <p className="text-xs text-primary-dark mt-1">
+                Quick-saves go here
+              </p>
             </div>
-            <p className="text-xs text-primary-dark mt-1">
-              Quick-saves go here
-            </p>
-          </div>
-        ) : (
-          <div className="bg-gray-50 border border-gray-300 rounded-lg p-3">
-            <p className="text-sm text-gray-600">
-              No active trip selected
-            </p>
-            <p className="text-xs text-gray-500 mt-1">
-              Set a default trip in Settings to use quick-saves
-            </p>
-          </div>
-        )}
-      </div>
-      
-      {/* Trip List */}
-      <div>
-        <div className="flex items-center justify-between mb-3">
-          <h2 className="text-base font-semibold text-gray-700">
-            Your Trips · {trips.length}
-          </h2>
+          ) : (
+            <div className="bg-gray-50 border border-gray-300 rounded-lg p-3">
+              <p className="text-sm text-gray-600">
+                No active trip selected
+              </p>
+              <p className="text-xs text-gray-500 mt-1">
+                Set a default trip in Settings to use quick-saves
+              </p>
+            </div>
+          )}
         </div>
         
-        <div className="space-y-4">
-          {trips.map(trip => (
-            <TripCard
-              key={trip.id}
-              trip={trip}
-              onClick={() => onTripClick(trip)}
-            />
-          ))}
+        {/* Trip List */}
+        <div>
+          <div className="flex items-center justify-between mb-3">
+            <h2 className="text-base font-semibold text-gray-700">
+              Your Trips · {trips.length}
+            </h2>
+          </div>
+          
+          <div className="space-y-4">
+            {trips.map(trip => (
+              <TripCard
+                key={trip.id}
+                trip={trip}
+                onClick={() => onTripClick(trip)}
+              />
+            ))}
+          </div>
+        </div>
+        
+        {/* Tip */}
+        <div className="pt-2 text-center text-xs text-gray-500 pb-4">
+          💡 Tip: Right-click any text to save!
         </div>
       </div>
       
-      {/* New Trip Button */}
-      <button
-        onClick={onNewTrip}
-        className="w-full border-2 border-dashed border-gray-300 rounded-lg p-4 text-gray-600 hover:border-primary hover:text-primary hover:bg-primary-light/30 transition-colors"
-      >
-        + New Trip
-      </button>
-      
-      {/* Tip */}
-      <div className="pt-2 text-center text-xs text-gray-500">
-        💡 Tip: Right-click any text to save!
+      {/* Footer - Fixed at bottom */}
+      <div className="border-t border-gray-200 p-4 flex-shrink-0 bg-white">
+        <Button
+          onClick={onNewTrip}
+          variant="primary"
+          className="w-full"
+        >
+          + New Trip
+        </Button>
       </div>
     </div>
   )
