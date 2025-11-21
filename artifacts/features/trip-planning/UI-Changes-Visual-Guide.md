@@ -708,5 +708,80 @@ TripDetail: [🔄] (p-2, text-xl) ✅
 
 ---
 
+## 14. Minimal Card Mode for Drag Reordering
+
+### BEFORE (Original Drag-and-Drop)
+```
+Cards remain full size during drag:
+┌─────────────────────────────────────────┐
+│ Fukuoka                          [⋮]  │
+│ [Day 3]                                 │
+│ 📍 Fukuoka, Japan                      │
+│ 🔴 reddit.com →                        │
+│ 🗺️ View on Maps →                🗑️ │
+└─────────────────────────────────────────┘
+(height: ~120px)
+
+User can only see 2-3 locations at a time.
+Must drag to edges to see context.
+No sequence numbers visible.
+```
+
+### AFTER (Minimal Card Mode)
+```
+Cards shrink to minimal view during drag:
+┌─────────────────────────────────────────┐
+│         [≡]                             │ ← Drag handle (centered, absolute)
+│         ↑                                │   Doesn't take layout space
+│                                         │
+│ Fukuoka                         [1]  │ ← Dragged card: blue outline, reduced opacity
+│ ↑                                         │   (follows cursor, no rotation)
+└─────────────────────────────────────────┘   (name left-aligned, no margin)
+(height: 48px)
+
+┌─────────────────────────────────────────┐
+│         [≡]                             │
+│ Tokyo                           [2]    │
+│ ↑                                         │
+└─────────────────────────────────────────┘
+
+┌─────────────────────────────────────────┐
+│         [≡]                             │
+│ Osaka                           [3]    │
+│ ↑                                         │
+└─────────────────────────────────────────┘
+
+User can see 10-15 locations at once.
+Sequence numbers update in real-time.
+Dragged card has blue outline and reduced opacity.
+Card follows cursor smoothly during drag.
+Drag handle moved to center-top.
+Location name is left-aligned in all states.
+```
+
+**Key Changes:**
+- ✨ Cards shrink to 48px height during drag
+- ✨ Shows only name, sequence number, and drag handle
+- ✨ Sequence numbers update live during drag
+- ✨ Sequence badge added to full card mode (top-right, before KebabMenu)
+- ✨ Dragged card: Blue outline (border-primary border-2), reduced opacity (opacity-60), no rotation
+- ✨ Card follows cursor smoothly during drag
+- ✨ Auto-scroll when cursor near edges
+- ✨ Smooth 200ms transitions
+- ✨ Drag handle moved to center-top
+- ✨ Press-and-hold activation (8px distance)
+- ✨ Cards expand back on drag end/cancel
+- ✨ Error toast only shows on actual API failure (not before API call)
+
+**Technical Details:**
+- Animation: 200ms ease-in-out transition
+- Activation: 8px movement before drag starts
+- Auto-scroll: Triggers within 50px of viewport edges
+- Sequence: 1-indexed, updates optimistically
+- Error handling: Reverts on API failure
+- Visual feedback: Blue outline + reduced opacity (no insertion line, no rotation)
+
+---
+
 **Use this guide alongside the full specification for implementation.**
 

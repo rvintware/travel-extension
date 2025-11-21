@@ -233,10 +233,26 @@ The Create Trip view SHALL include the following fields (in order):
 #### FR-3.7: Drag and Drop Reordering
 - WHEN viewing a specific day (not "All" tab)
 - THEN user SHALL be able to drag location cards to reorder them
+- WHEN user presses and holds drag handle
+- THEN all cards SHALL shrink to minimal mode (48px height)
+- AND cards SHALL show only location name, sequence number, and drag handle
+- AND sequence numbers SHALL update in real-time during drag
+- AND dragged card SHALL show blue outline and reduced opacity (no rotation)
+- AND dragged card SHALL follow cursor smoothly during drag
+- AND sequence badge SHALL be visible in full card mode when viewing specific day
+- AND auto-scroll SHALL activate when cursor near viewport edges
+- WHEN user releases drag handle (drop)
+- THEN cards SHALL expand back to full size
+- AND new order SHALL be saved to database
+- WHEN user cancels drag (ESC or outside drop zone)
+- THEN cards SHALL expand back immediately
+- AND no changes SHALL be saved
 - SHALL update `display_order` field for affected locations
-- SHALL provide visual feedback during drag (shadow, opacity change)
+- SHALL provide visual feedback during drag (blue outline, reduced opacity, card follows cursor)
 - SHALL save new order to database immediately
 - SHALL use optimistic UI updates for smooth experience
+- SHALL revert changes on API error
+- SHALL disable dragging during save operation
 
 ### FR-4: Quick Add to Trip
 

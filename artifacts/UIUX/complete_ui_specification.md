@@ -373,8 +373,9 @@ COMPACT LOCATION CARD (Trip Detail View)
 ════════════════════════════════════════════
 
 ┌─────────────────────────────────────────┐
-│ Fukuoka                          [⋮]  │ ← Line 1: Name + KebabMenu
-│                                         │   (text-lg, semibold)
+│ [≡]  Fukuoka                    [1] [⋮]│ ← Line 1: Drag Handle + Name + Sequence + KebabMenu
+│      ↑                                  │   (drag handle center-top, sequence badge top-right)
+│                                         │
 │ [Day 3]                                 │ ← Line 2: Day Badge (conditional)
 │                                         │   (bg-primary, rounded-full)
 │ 📍 Fukuoka, Japan                      │ ← Line 3: Address (conditional)
@@ -396,9 +397,25 @@ CARD SPECIFICATIONS:
 ├─ Shadow: shadow-card, hover:shadow-card-hover
 ├─ Cursor: cursor-pointer (entire card clickable)
 │
-├─ Line 1: Location Name + KebabMenu
-│  ├─ Layout: flex justify-between
-│  ├─ Name: text-lg, font-semibold, text-gray-900
+├─ Drag Handle (Center-Top) - Only when showDragHandle === true
+│  ├─ Position: absolute top-2 left-1/2 -translate-x-1/2
+│  ├─ Icon: ≡≡ (double equals)
+│  ├─ Size: text-lg (18px)
+│  ├─ Color: text-gray-400
+│  ├─ Cursor: cursor-grab → cursor-grabbing
+│  ├─ Z-index: z-10
+│  └─ Layout: Absolutely positioned, doesn't affect text alignment
+│
+├─ Line 1: Location Name + Sequence Badge + KebabMenu
+│  ├─ Container: flex items-start justify-between gap-2 mb-2
+│  ├─ Name: text-lg font-semibold text-gray-900 flex-1 leading-tight
+│  │  ├─ Alignment: Left-aligned (no margin-left)
+│  │  └─ Layout: Starts at left edge of padding
+│  ├─ Sequence Badge: Only when showDragHandle === true
+│  │  ├─ Position: Before KebabMenu, right-aligned
+│  │  ├─ Format: Plain number (1, 2, 3, etc.)
+│  │  ├─ Style: bg-gray-100 text-gray-700 px-2 py-0.5 rounded text-xs font-medium
+│  │  └─ Layout: flex items-center gap-2 with KebabMenu
 │  └─ KebabMenu: Right-aligned, stops propagation
 │
 ├─ Line 2: Day Badge (conditional)
@@ -440,7 +457,1239 @@ CARD SPECIFICATIONS:
    ├─ Priority 1: place_id → place/?q=place_id:{id}
    ├─ Priority 2: lat/lng → maps?q={lat},{lng}
    └─ Priority 3: address → search/?api=1&query={address}
+
+SEQUENCE BADGE (Full Card Mode):
+├─ Display: Only when viewing specific day (showDragHandle === true)
+├─ Position: Top-right, before KebabMenu
+├─ Format: Plain number (1, 2, 3, etc.)
+├─ Style: bg-gray-100 text-gray-700 px-2 py-0.5 rounded text-xs font-medium
+└─ Layout: flex items-center gap-2 with KebabMenu
 ```
+
+---
+
+### 4.6. Minimal Card Mode - Drag Reordering
+
+```
+MINIMAL CARD MODE (During Drag Reordering)
+════════════════════════════════════════════
+
+┌─────────────────────────────────────────────┐
+│         [≡]                                 │ ← Drag handle (centered, absolute)
+│         ↑                                    │   Doesn't take layout space
+│                                             │
+│ Location Name                      [1]    │ ← 48px height
+│ ↑                                         │   (name left-aligned, no margin)
+└─────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────┐
+│         [≡]                                 │
+│ Another Location                    [2]    │
+│ ↑                                         │
+└─────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────┐
+│         [≡]                                 │
+│ Third Location (dragged)            [3]  │ ← Blue outline, reduced opacity
+│ ↑                                         │   (follows cursor, no rotation)
+└─────────────────────────────────────────────┘
+```
+
+MINIMAL CARD SPECIFICATIONS:
+├─ Container: bg-white, border-gray-300, rounded-lg
+├─ Height: h-12 (48px fixed)
+├─ Padding: px-3 py-2 (12px horizontal, 8px vertical)
+├─ Shadow: shadow-sm (lighter than full card)
+├─ Transition: transition-all duration-200 ease-in-out
+├─ Layout: flex items-center justify-between
+│
+├─ Drag Handle (Center-Top)
+│  ├─ Position: absolute top-2 left-1/2 -translate-x-1/2
+│  ├─ Icon: ≡≡ (double equals)
+│  ├─ Size: text-lg
+│  ├─ Color: text-gray-400
+│  ├─ Cursor: cursor-grab → cursor-grabbing
+│  ├─ Z-index: z-10
+│  └─ Layout: Absolutely positioned, doesn't affect text alignment
+│
+├─ Location Name
+│  ├─ Position: Left-aligned (no margin-left)
+│  ├─ Font: text-sm font-medium
+│  ├─ Color: text-gray-900
+│  ├─ Truncation: truncate (ellipsis for overflow)
+│  ├─ Layout: flex-1 (takes available space)
+│  └─ Alignment: Starts at left edge of padding (px-3 = 12px from card edge)
+│
+└─ Sequence Badge
+   ├─ Position: Right-aligned
+   ├─ Format: Plain number (1, 2, 3, etc.)
+   ├─ Style: bg-gray-100 text-gray-700
+   ├─ Padding: px-2 py-0.5
+   ├─ Border Radius: rounded
+   ├─ Font: text-xs font-medium
+   └─ Display: Only in minimal mode
+
+DRAGGED CARD VISUAL FEEDBACK:
+├─ Border: border-primary border-2 (blue outline, 2px)
+├─ Opacity: opacity-60 (reduced opacity for visual feedback)
+├─ Rotation: None (removed rotation effect)
+├─ Movement: Card follows cursor (handled by @dnd-kit)
+└─ Display: Only on the card being dragged
+
+ANIMATION SPECIFICATIONS:
+├─ Duration: 200ms (duration-200)
+├─ Timing: ease-in-out
+├─ Properties: transition-all (height, padding, opacity)
+├─ Trigger: Drag start/end
+└─ Behavior: All cards animate simultaneously
+
+ACTIVATION:
+├─ Trigger: Press and hold drag handle
+├─ Activation Distance: 8px movement before drag starts
+├─ Exit: Drag end or cancel (ESC)
+└─ State: isMinimalMode boolean
+
+AUTO-SCROLL:
+├─ Trigger: Cursor within 50px of viewport edges
+├─ Speed: 10px per frame (~60fps)
+├─ Direction: Up when near top, down when near bottom
+└─ Cleanup: Automatic on drag end/cancel
+
+DRAGGED CARD VISUAL FEEDBACK:
+├─ Border: border-primary border-2 (blue outline, 2px width)
+├─ Opacity: opacity-60 (reduced to 60% for visual feedback)
+├─ Rotation: None (removed rotation effect)
+├─ Movement: Card follows cursor smoothly (handled by @dnd-kit transform)
+└─ Applies to: Both full card and minimal card modes
+
+---
+
+### 4.7. Drag-and-Drop Reordering - Complete Implementation Documentation
+
+**Implementation:** DragOverlay-based cursor-following drag with placeholder feedback  
+**Technology:** @dnd-kit/core, @dnd-kit/sortable, @dnd-kit/modifiers  
+**Status:** Production-ready  
+**Last Updated:** December 2024
+
+---
+
+#### 4.7.1. Card States Overview
+
+The location card system has **four distinct visual states** during drag-and-drop:
+
+1. **Normal State** - Full compact card (default, not dragging)
+2. **Minimal State** - Shrunk card during drag (48px height, all cards)
+3. **Placeholder State** - Dashed border box where dragged card was
+4. **DragOverlay State** - Card following cursor (rendered separately, outside DOM)
+
+---
+
+#### 4.7.2. Normal State - Full Compact Card (Default)
+
+```
+COMPACT LOCATION CARD (Normal State - Not Dragging)
+════════════════════════════════════════════════════
+
+┌─────────────────────────────────────────┐
+│         [≡]                             │ ← Drag handle (centered, absolute)
+│         ↑                                │   Doesn't take layout space
+│                                         │
+│ King Fish                      [1] [⋮] │ ← Line 1: Name + Sequence + KebabMenu
+│ ↑                                         │   (name left-aligned, no margin)
+│                                         │
+│ [Day 3]                                 │ ← Line 2: Day Badge (conditional)
+│                                         │   (bg-primary, rounded-full)
+│ 📍 Fukuoka, Japan                      │ ← Line 3: Address (conditional)
+│                                         │   (text-sm, text-gray-600)
+│                                         │
+│ 🔴 reddit.com →                        │ ← Line 4: Reddit link (standalone)
+│                                         │   (text-sm, text-primary)
+│                                         │   (hover:text-primary-dark)
+│                                         │
+│ 🗺️ View on Maps →                🗑️ │ ← Line 5: Google Maps + Trash
+│                                         │   (flex justify-between)
+│                                         │   (left: Google Maps link)
+│                                         │   (right: Trash icon)
+└─────────────────────────────────────────┘
+
+VISUAL SPECIFICATIONS:
+├─ Container: bg-white, border-gray-300, rounded-lg
+├─ Padding: p-3 (12px all sides)
+├─ Shadow: shadow-card, hover:shadow-card-hover
+├─ Cursor: cursor-pointer (entire card clickable)
+├─ Height: Auto (min-h-[120px] typical, varies with content)
+├─ Transition: transition-all duration-200 ease-in-out
+│
+├─ Drag Handle (Center-Top) - Only when showDragHandle === true
+│  ├─ Position: absolute top-2 left-1/2 -translate-x-1/2
+│  ├─ Icon: ≡≡ (double equals, Unicode U+2261)
+│  ├─ Size: text-lg (18px)
+│  ├─ Color: text-gray-400
+│  ├─ Cursor: cursor-grab → cursor-grabbing (on active)
+│  ├─ Z-index: z-10
+│  ├─ Click: Stops propagation, starts drag
+│  └─ Layout: Absolutely positioned, doesn't affect text alignment
+│
+├─ Line 1: Location Name + Sequence Badge + KebabMenu
+│  ├─ Container: flex items-start justify-between gap-2 mb-2
+│  ├─ Name: text-lg font-semibold text-gray-900 flex-1 leading-tight
+│  │  ├─ Alignment: Left-aligned (no margin-left)
+│  │  ├─ Layout: Starts at left edge of padding (p-3 = 12px from card edge)
+│  │  └─ Note: Drag handle is absolutely positioned, so no margin needed
+│  ├─ Sequence Badge: Only when showDragHandle === true
+│  │  ├─ Position: Before KebabMenu, right-aligned
+│  │  ├─ Format: Plain number (1, 2, 3, etc.)
+│  │  ├─ Style: bg-gray-100 text-gray-700 px-2 py-0.5 rounded text-xs font-medium
+│  │  └─ Layout: flex items-center gap-2 with KebabMenu
+│  └─ KebabMenu: Right-aligned, stops propagation
+│
+├─ Line 2: Day Badge (conditional)
+│  ├─ Display: Only if location.dayNumber exists
+│  ├─ Style: bg-primary text-white px-2 py-1 rounded-full text-xs font-medium
+│  └─ Margin: mb-2 (8px bottom)
+│
+├─ Line 3: Address (conditional)
+│  ├─ Display: Only if location.address exists
+│  ├─ Icon: 📍 emoji
+│  ├─ Text: text-sm text-gray-600
+│  └─ Margin: mb-3 (12px bottom)
+│
+├─ Line 4: Reddit Link (standalone)
+│  ├─ Layout: Standalone line, left-aligned
+│  ├─ Icon: Source emoji (🔴 for reddit.com)
+│  ├─ Text: Domain name + → arrow
+│  ├─ Styling: text-sm text-primary hover:text-primary-dark
+│  └─ Margin: mb-2 (8px bottom)
+│
+└─ Line 5: Google Maps + Trash (same line)
+   ├─ Container: flex items-center justify-between gap-2
+   ├─ Left: Google Maps link
+   │  ├─ Display: Only if googleMapsUrl exists
+   │  ├─ Icon: 🗺️ emoji
+   │  ├─ Text: "View on Maps" + → arrow
+   │  └─ Styling: text-sm text-primary hover:text-primary-dark
+   └─ Right: Trash icon
+      ├─ Display: Only if onDelete exists
+      ├─ Icon: 🗑️ emoji
+      ├─ Styling: text-xl text-gray-400 hover:text-red-500
+      └─ Click: Opens DeletePill (position="inline")
+```
+
+**When Normal State is Active:**
+- User is NOT dragging any card
+- All cards display full content
+- Drag handles visible (when viewing specific day)
+- Sequence badges visible (when viewing specific day)
+- Location name is left-aligned in all cases (no margin)
+- All interactions enabled (click, kebab menu, delete, etc.)
+
+---
+
+#### 4.7.3. Minimal State - Shrunk Card During Drag
+
+```
+MINIMAL CARD MODE (During Drag Reordering - ALL Cards Shrink)
+═════════════════════════════════════════════════════════════
+
+┌─────────────────────────────────────────────┐
+│         [≡]                                 │ ← Drag handle (centered, absolute)
+│         ↑                                    │   Doesn't take layout space
+│                                             │
+│ Location Name                      [1]    │ ← 48px height (h-12)
+│ ↑                                         │   (name left-aligned, no margin)
+└─────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────┐
+│         [≡]                                 │
+│ Another Location                    [2]    │
+│ ↑                                         │
+└─────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────┐
+│         [≡]                                 │
+│ Third Location                      [3]    │
+│ ↑                                         │
+└─────────────────────────────────────────────┘
+
+VISUAL SPECIFICATIONS:
+├─ Container: bg-white, border-gray-300, rounded-lg
+├─ Height: h-12 (48px fixed) - CRITICAL: Must be fixed height
+├─ Padding: px-3 py-2 (12px horizontal, 8px vertical)
+├─ Shadow: shadow-sm (lighter than full card)
+├─ Transition: transition-all duration-200 ease-in-out
+├─ Layout: flex items-center justify-between
+│
+├─ Drag Handle (Center-Top)
+│  ├─ Position: absolute top-2 left-1/2 -translate-x-1/2
+│  ├─ Icon: ≡≡ (double equals)
+│  ├─ Size: text-lg (18px)
+│  ├─ Color: text-gray-400
+│  ├─ Cursor: cursor-grab → cursor-grabbing
+│  ├─ Z-index: z-10
+│  └─ Layout: Absolutely positioned, doesn't affect text alignment
+│
+├─ Location Name
+│  ├─ Position: Left-aligned (no margin-left)
+│  ├─ Font: text-sm font-medium
+│  ├─ Color: text-gray-900
+│  ├─ Truncation: truncate (ellipsis for overflow)
+│  ├─ Layout: flex-1 (takes available space)
+│  └─ Alignment: Starts at left edge of padding (px-3 = 12px from card edge)
+│
+└─ Sequence Badge
+   ├─ Position: Right-aligned
+   ├─ Format: Plain number (1, 2, 3, etc.)
+   ├─ Style: bg-gray-100 text-gray-700 px-2 py-0.5 rounded text-xs font-medium
+   └─ Display: Always visible in minimal mode
+
+TRIGGER CONDITIONS:
+├─ When: User presses and holds drag handle
+├─ Activation: 8px movement before drag starts (PointerSensor)
+├─ Effect: ALL cards in list shrink simultaneously
+├─ Duration: 200ms transition
+└─ Exit: On drag end or cancel (ESC key)
+
+CONTENT HIDDEN IN MINIMAL MODE:
+├─ Day Badge (hidden)
+├─ Address (hidden)
+├─ Reddit Link (hidden)
+├─ Google Maps Link (hidden)
+├─ Trash Icon (hidden)
+└─ KebabMenu (hidden)
+
+CONTENT VISIBLE IN MINIMAL MODE:
+├─ Drag Handle (always visible, absolutely positioned)
+├─ Location Name (truncated if needed, left-aligned, no margin)
+└─ Sequence Badge (always visible)
+```
+
+---
+
+#### 4.7.4. Placeholder State - Where Dragged Card Was
+
+```
+PLACEHOLDER STATE (Shows Where Dragged Card Was)
+═════════════════════════════════════════════════
+
+┌─────────────────────────────────────────────┐
+│         [≡]  Location Name          [1]    │ ← Normal card (not dragged)
+└─────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────┐
+│ ┌───────────────────────────────────────┐ │ ← PLACEHOLDER (dashed border)
+│ │                                         │ │   Shows where dragged card was
+│ │         (Empty space)                   │ │   Original card opacity: 0
+│ │                                         │ │
+│ └───────────────────────────────────────┘ │
+└─────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────┐
+│         [≡]  Another Location        [3]    │ ← Other cards shift up/down
+└─────────────────────────────────────────────┘
+
+PLACEHOLDER SPECIFICATIONS:
+├─ Container: bg-gray-100 border-2 border-dashed border-gray-300 rounded-lg
+├─ Height: 
+│  ├─ Minimal mode: h-12 (48px) - matches minimal card height
+│  └─ Full mode: min-h-[120px] - matches full card typical height
+├─ Display: Only when isActive === true (card being dragged)
+├─ Position: Exact position where dragged card was
+├─ Opacity: Original card opacity set to 0 (hidden but maintains space)
+├─ Purpose: Visual feedback showing drop target location
+└─ Visual: Dashed border indicates "empty slot"
+
+IMPLEMENTATION DETAILS:
+├─ Original card: opacity: 0 (invisible but maintains layout space)
+├─ Placeholder: Rendered in same position with dashed border
+├─ Other cards: Transform applied to shift around placeholder
+└─ DragOverlay: Rendered separately, follows cursor
+
+WHEN PLACEHOLDER APPEARS:
+├─ Trigger: isActive === true (card is being dragged)
+├─ Location: Exact position of dragged card in list
+├─ Duration: Entire duration of drag operation
+└─ Removal: When drag ends or cancels (isActive === false)
+```
+
+---
+
+#### 4.7.5. DragOverlay State - Card Following Cursor
+
+```
+DRAGOVERLAY STATE (Card Following Cursor)
+══════════════════════════════════════════
+
+┌─────────────────────────────────────────────┐
+│         [≡]  Location Name          [1]    │ ← Normal cards in list
+└─────────────────────────────────────────────┘
+
+┌─────────────────────────────────────────────┐
+│ ┌───────────────────────────────────────┐ │ ← PLACEHOLDER (where card was)
+│ │                                         │ │
+│ └───────────────────────────────────────┘ │
+└─────────────────────────────────────────────┘
+
+                    ┌─────────────────────────────┐
+                    │ [≡]  Dragged Card    [2]  │ ← DRAGOVERLAY (follows cursor)
+                    │                             │   Blue outline, reduced opacity
+                    │ [Day 3]                     │   Moves smoothly with mouse
+                    │                             │   Rendered outside list DOM
+                    │ 📍 Address                  │
+                    │                             │
+                    │ 🔴 reddit.com →            │
+                    │                             │
+                    │ 🗺️ View on Maps →    🗑️ │
+                    └─────────────────────────────┘
+                              ↑
+                              │
+                         Cursor position
+
+DRAGOVERLAY SPECIFICATIONS:
+├─ Rendering: Separate from list DOM (portal-like, always on top)
+├─ Position: Follows cursor exactly (handled by @dnd-kit)
+├─ Z-index: Highest (always on top, z-[9999])
+├─ Visual Feedback:
+│  ├─ Border: border-primary border-2 (blue outline, 2px width)
+│  │  └─ Color: #3B82F6 (primary blue)
+│  ├─ Opacity: opacity-60 (reduced to 60% for visual feedback)
+│  └─ Rotation: None (no rotation effect)
+├─ Content: Exact copy of card being dragged
+│  ├─ Shows same content as original card
+│  ├─ Maintains minimal mode if isMinimalMode === true
+│  └─ Shows sequence badge if applicable
+├─ Movement: Smooth, instant (no transition during drag)
+├─ Constraints: Vertical axis only (restrictToVerticalAxis modifier)
+└─ Width: Matches original card width (typically full container width)
+
+TECHNICAL IMPLEMENTATION:
+├─ Component: <DragOverlay> from @dnd-kit/core
+├─ Condition: Renders when activeId !== null
+├─ Card Component: CompactLocationCard with isDragging={true}
+├─ Props: All same props as original card
+│  ├─ location: Same location object
+│  ├─ isMinimalMode: Same state as list cards
+│  ├─ sequenceNumber: Calculated from current position
+│  └─ showDragHandle: Same as original
+└─ Cleanup: Automatically removed when drag ends/cancels
+
+DRAGOVERLAY CONTENT MODES:
+├─ Full Mode: Shows all card content (when not in minimal mode)
+│  └─ All lines visible: Name, Day Badge, Address, Links, Trash
+└─ Minimal Mode: Shows only name + sequence badge (when isMinimalMode === true)
+   └─ Matches minimal cards in list
+```
+
+---
+
+#### 4.7.6. Complete Drag Sequence - Visual Flow
+
+```
+DRAG SEQUENCE VISUALIZATION
+═══════════════════════════
+
+STEP 1: User presses drag handle
+─────────────────────────────────
+┌─────────────────────────────────────────────┐
+│ [≡]  Fukuoka                    [1] [⋮]    │ ← Normal full card
+│                                             │
+│ [Day 3]                                     │
+│ 📍 Fukuoka, Japan                          │
+│ 🔴 reddit.com →                            │
+│ 🗺️ View on Maps →                    🗑️ │
+└─────────────────────────────────────────────┘
+         ↑
+    User clicks here
+
+STEP 2: User moves 8px (activation threshold reached)
+───────────────────────────────────────────────────────
+┌─────────────────────────────────────────────┐
+│         [≡]  Fukuoka                [1]    │ ← ALL cards shrink to minimal
+│         [≡]  Tokyo                  [2]    │   (200ms transition)
+│         [≡]  Osaka                  [3]    │   isMinimalMode = true
+└─────────────────────────────────────────────┘
+
+STEP 3: Drag starts - DragOverlay appears, Placeholder shows
+─────────────────────────────────────────────────────────────
+┌─────────────────────────────────────────────┐
+│         [≡]  Tokyo                  [1]    │ ← Cards reorder (sequence updates)
+│ ┌───────────────────────────────────────┐ │ ← Placeholder appears
+│ │                                         │ │   (dashed border, gray bg)
+│ └───────────────────────────────────────┘ │   Original card opacity: 0
+│         [≡]  Osaka                  [3]    │
+└─────────────────────────────────────────────┘
+
+                    ┌─────────────────────────┐
+                    │ [≡]  Fukuoka    [2]  │ ← DragOverlay follows cursor
+                    └─────────────────────────┘   (blue outline, 60% opacity)
+                              ↑
+                         Cursor moves
+
+STEP 4: User drags between cards (cards shift)
+───────────────────────────────────────────────
+┌─────────────────────────────────────────────┐
+│         [≡]  Tokyo                  [1]    │
+│ ┌───────────────────────────────────────┐ │ ← Placeholder moves
+│ │                                         │ │   (other cards shift)
+│ └───────────────────────────────────────┘ │   Sequence numbers update
+│         [≡]  Osaka                  [3]    │
+└─────────────────────────────────────────────┘
+
+                    ┌─────────────────────────┐
+                    │ [≡]  Fukuoka    [2]  │ ← DragOverlay at new position
+                    └─────────────────────────┘   (follows cursor Y position)
+
+STEP 5: User drops card (drag ends)
+────────────────────────────────────
+┌─────────────────────────────────────────────┐
+│         [≡]  Tokyo                  [1]    │ ← Cards expand back to full
+│         [≡]  Fukuoka                [2]    │   (200ms transition)
+│         [≡]  Osaka                  [3]    │   isMinimalMode = false
+└─────────────────────────────────────────────┘   Placeholder removed
+         ↑                                        DragOverlay removed
+    New order saved                                Order saved to database
+```
+
+**Sequence Timing:**
+- Step 1 → Step 2: 0-8px movement (activation threshold)
+- Step 2 → Step 3: Instant (drag start event)
+- Step 3 → Step 4: Continuous (cursor movement)
+- Step 4 → Step 5: User releases mouse (drag end event)
+
+---
+
+#### 4.7.7. Visual Feedback Rules - Detailed Specifications
+
+**DRAGGED CARD (DragOverlay):**
+```
+VISUAL FEEDBACK SPECIFICATIONS:
+├─ Border: border-primary border-2
+│  ├─ Color: #3B82F6 (primary blue)
+│  ├─ Width: 2px (border-2)
+│  ├─ Style: solid (not dashed)
+│  └─ Purpose: Clear visual indication of dragged item
+│
+├─ Opacity: opacity-60
+│  ├─ Value: 60% opacity (0.6)
+│  ├─ Purpose: Visual feedback that card is being dragged
+│  ├─ Effect: Makes card semi-transparent
+│  └─ Contrast: Still readable but clearly "floating"
+│
+├─ Rotation: None
+│  ├─ Previous: rotate-[-2deg] (removed)
+│  ├─ Reason: Cleaner, more professional appearance
+│  └─ Effect: Card maintains normal orientation
+│
+├─ Movement: Instant (no transition)
+│  ├─ During drag: transition: undefined
+│  ├─ Purpose: Card follows cursor exactly
+│  ├─ Implementation: Handled by @dnd-kit transform
+│  └─ Performance: GPU-accelerated transform
+│
+├─ Shadow: Inherited from card
+│  ├─ Normal: shadow-card
+│  ├─ No additional shadow during drag
+│  └─ Maintains card appearance
+│
+└─ Z-index: Highest
+   ├─ Value: z-[9999] or higher
+   ├─ Purpose: Always visible above other elements
+   └─ Implementation: Handled by DragOverlay component
+```
+
+**ORIGINAL CARD (In List - When Being Dragged):**
+```
+VISUAL FEEDBACK SPECIFICATIONS:
+├─ Opacity: opacity-0 (when isActive === true)
+│  ├─ Value: 0% opacity (completely invisible)
+│  ├─ Purpose: Hide original card while dragging
+│  ├─ Effect: Card space maintained by placeholder
+│  └─ Implementation: style={{ opacity: isActive ? 0 : undefined }}
+│
+├─ Transform: Applied by @dnd-kit (for other cards)
+│  ├─ Purpose: Shift cards around placeholder
+│  ├─ Behavior: Smooth, instant updates
+│  ├─ Transition: Only when not dragging
+│  └─ Implementation: CSS.Transform.toString(transform)
+│
+├─ Placeholder: Shown in place of hidden card
+│  ├─ Style: Dashed border, gray background
+│  ├─ Height: Matches card height (minimal or full)
+│  └─ Purpose: Visual feedback showing drop location
+│
+└─ Pointer Events: Disabled
+   ├─ During drag: pointer-events: none (on original card)
+   └─ Purpose: Prevent accidental interactions
+```
+
+**OTHER CARDS (In List - Not Being Dragged):**
+```
+VISUAL FEEDBACK SPECIFICATIONS:
+├─ Transform: Applied to shift around placeholder
+│  ├─ Purpose: Make room for dragged card
+│  ├─ Behavior: Smooth movement
+│  └─ Implementation: @dnd-kit sortable transform
+│
+├─ Opacity: Normal (100%)
+│  ├─ No opacity changes
+│  └─ Maintains full visibility
+│
+├─ Transition: Disabled during drag
+│  ├─ Purpose: Instant position updates
+│  └─ Implementation: transition: isDragging ? undefined : transition
+│
+└─ Sequence Numbers: Update in real-time
+   ├─ Purpose: Show new position immediately
+   └─ Implementation: Calculated from current order
+```
+
+---
+
+#### 4.7.8. Animation Specifications - Complete Details
+
+**CARD SHRINKING (Drag Start):**
+```
+ANIMATION: Full Card → Minimal Card
+───────────────────────────────────
+├─ Duration: 200ms (duration-200)
+├─ Timing: ease-in-out
+├─ Properties: transition-all
+│  ├─ Height: Auto → 48px (h-12)
+│  ├─ Padding: p-3 → px-3 py-2
+│  ├─ Content: All content hidden except name + badge
+│  └─ Shadow: shadow-card → shadow-sm
+│
+├─ Trigger: handleDragStart() called
+├─ Scope: ALL cards in list (simultaneous)
+├─ State: isMinimalMode = true
+├─ Visual: Smooth height reduction, content fades
+└─ Performance: GPU-accelerated (transform + opacity)
+
+TIMING BREAKDOWN:
+├─ 0ms: User moves 8px, drag starts
+├─ 0ms: isMinimalMode set to true
+├─ 0-200ms: Cards animate shrinking
+└─ 200ms: Cards fully shrunk, minimal mode active
+```
+
+**CARD EXPANDING (Drag End):**
+```
+ANIMATION: Minimal Card → Full Card
+───────────────────────────────────
+├─ Duration: 200ms (duration-200)
+├─ Timing: ease-in-out
+├─ Properties: transition-all
+│  ├─ Height: 48px (h-12) → Auto
+│  ├─ Padding: px-3 py-2 → p-3
+│  ├─ Content: Name + badge → All content visible
+│  └─ Shadow: shadow-sm → shadow-card
+│
+├─ Trigger: handleDragEnd() or handleDragCancel() called
+├─ Scope: ALL cards in list (simultaneous)
+├─ State: isMinimalMode = false
+├─ Visual: Smooth height expansion, content appears
+└─ Performance: GPU-accelerated (transform + opacity)
+
+TIMING BREAKDOWN:
+├─ 0ms: User releases mouse or presses ESC
+├─ 0ms: isMinimalMode set to false
+├─ 0-200ms: Cards animate expanding
+└─ 200ms: Cards fully expanded, normal mode active
+```
+
+**DRAGOVERLAY MOVEMENT:**
+```
+ANIMATION: Cursor Following
+──────────────────────────
+├─ Duration: Instant (no transition)
+├─ Timing: N/A (no easing)
+├─ Properties: transform (handled by @dnd-kit)
+│  ├─ X: Follows cursor X position (but constrained to vertical)
+│  └─ Y: Follows cursor Y position (constrained to vertical axis)
+│
+├─ Trigger: Mouse move during drag
+├─ Scope: Only DragOverlay card
+├─ Constraint: restrictToVerticalAxis (Y-axis only)
+├─ Visual: Card moves smoothly with cursor
+└─ Performance: GPU-accelerated transform
+
+MOVEMENT CONSTRAINTS:
+├─ Horizontal: Locked (no X-axis movement)
+├─ Vertical: Free (follows cursor Y position)
+└─ Purpose: Maintain list structure, prevent horizontal drift
+```
+
+**PLACEHOLDER APPEARANCE:**
+```
+ANIMATION: Placeholder Fade-In
+───────────────────────────────
+├─ Duration: Instant (no transition)
+├─ Timing: N/A
+├─ Properties: opacity, display
+│  ├─ Opacity: 0 → 1 (instant)
+│  └─ Display: none → block (instant)
+│
+├─ Trigger: isActive === true
+├─ Scope: Only active card
+├─ Visual: Placeholder appears instantly when drag starts
+└─ Purpose: Immediate visual feedback
+
+TIMING:
+├─ 0ms: Drag starts, isActive = true
+├─ 0ms: Original card opacity = 0
+└─ 0ms: Placeholder visible
+```
+
+**SEQUENCE NUMBER UPDATES:**
+```
+ANIMATION: Sequence Badge Updates
+──────────────────────────────────
+├─ Duration: Instant (no transition)
+├─ Timing: N/A
+├─ Properties: Text content change
+│  └─ Number: Updates immediately as card moves
+│
+├─ Trigger: Card position changes during drag
+├─ Scope: All cards (sequence numbers recalculate)
+├─ Visual: Numbers update instantly
+└─ Purpose: Real-time position feedback
+
+UPDATE LOGIC:
+├─ Calculated from: Current card order in list
+├─ Formula: index + 1 (1-indexed)
+├─ Updates: On every drag over event
+└─ Display: Always visible in minimal mode
+```
+
+---
+
+#### 4.7.9. Movement Constraints - Complete Rules
+
+**VERTICAL CONSTRAINT:**
+```
+CONSTRAINT: restrictToVerticalAxis
+───────────────────────────────────
+├─ Modifier: @dnd-kit/modifiers
+├─ Applied to: DndContext
+├─ Effect: DragOverlay can only move vertically
+│  ├─ X-axis: Locked (no horizontal movement)
+│  └─ Y-axis: Free (follows cursor Y position)
+│
+├─ Purpose: Maintain list structure
+├─ Visual: Card moves up/down only
+├─ Implementation: modifiers={[restrictToVerticalAxis]}
+└─ User Experience: Prevents accidental horizontal drift
+
+VISUAL BEHAVIOR:
+├─ Cursor moves left/right: Card stays in same X position
+├─ Cursor moves up/down: Card follows cursor Y position
+└─ Result: Card moves only vertically within list
+```
+
+**CONTAINER CONSTRAINT:**
+```
+CONSTRAINT: Viewport Boundaries
+───────────────────────────────
+├─ Auto-scroll: Enabled when cursor near edges
+│  ├─ Threshold: 50px from top/bottom
+│  ├─ Speed: 10px per frame (~60fps)
+│  ├─ Direction: Up when near top, down when near bottom
+│  └─ Purpose: Allow dragging beyond visible area
+│
+├─ Visual: List scrolls automatically
+├─ Implementation: Mouse move listener + setInterval
+└─ Cleanup: Automatic on drag end/cancel
+
+AUTO-SCROLL LOGIC:
+├─ Detect: Cursor within 50px of container top/bottom
+├─ Calculate: Distance from edge
+├─ Scroll: 10px per frame in appropriate direction
+├─ Stop: When cursor moves away or drag ends
+└─ Performance: ~60fps smooth scrolling
+```
+
+**DROP ZONE:**
+```
+CONSTRAINT: Valid Drop Targets
+──────────────────────────────
+├─ Valid: Other location cards in same day
+├─ Invalid: 
+│  ├─ Same card (no-op, returns to original position)
+│  ├─ Cards from different days (not allowed)
+│  └─ Outside list container (cancels drag)
+│
+├─ Collision Detection: closestCenter
+├─ Purpose: Ensure logical reordering
+└─ Implementation: @dnd-kit collision detection
+
+DROP VALIDATION:
+├─ Check: active.id !== over.id (not same card)
+├─ Check: Both cards in same day (selectedDay)
+├─ Check: over.id exists in filteredLocations
+└─ Result: Only valid drops trigger reorder
+```
+
+---
+
+#### 4.7.10. State Management - Complete Details
+
+**STATE VARIABLES:**
+```
+STATE MANAGEMENT:
+├─ isMinimalMode: boolean
+│  ├─ Purpose: Controls card height (full vs minimal)
+│  ├─ Default: false
+│  ├─ Set to: true on drag start
+│  ├─ Reset to: false on drag end/cancel
+│  └─ Effect: All cards shrink/expand simultaneously
+│
+├─ activeId: string | null
+│  ├─ Purpose: Tracks which card is being dragged
+│  ├─ Default: null
+│  ├─ Set to: event.active.id on drag start
+│  ├─ Reset to: null on drag end/cancel
+│  └─ Effect: Controls DragOverlay rendering and placeholder
+│
+├─ isSavingOrder: boolean
+│  ├─ Purpose: Prevents overlapping drag operations
+│  ├─ Default: false
+│  ├─ Set to: true during API call
+│  ├─ Reset to: false after API call completes
+│  └─ Effect: Disables drag sensors during save
+│
+└─ scrollContainerRef: RefObject<HTMLDivElement>
+   ├─ Purpose: Reference to scrollable container
+   ├─ Used for: Auto-scroll calculations
+   └─ Type: useRef<HTMLDivElement>(null)
+```
+
+**EVENT HANDLERS:**
+```
+EVENT HANDLERS:
+├─ handleDragStart(event: DragStartEvent)
+│  ├─ Actions:
+│  │  ├─ setIsMinimalMode(true)
+│  │  └─ setActiveId(event.active.id)
+│  ├─ Effect: All cards shrink, DragOverlay appears
+│  └─ Timing: Called when 8px movement threshold reached
+│
+├─ handleDragEnd(event: DragEndEvent)
+│  ├─ Actions:
+│  │  ├─ setIsMinimalMode(false)
+│  │  ├─ setActiveId(null)
+│  │  ├─ Calculate new order from event.over
+│  │  ├─ Optimistic UI update (immediate)
+│  │  ├─ setIsSavingOrder(true)
+│  │  ├─ API call to save order
+│  │  └─ setIsSavingOrder(false)
+│  ├─ Effect: Cards expand, order saved
+│  └─ Error Handling: Revert on API failure
+│
+└─ handleDragCancel(event: DragCancelEvent)
+   ├─ Actions:
+   │  ├─ setIsMinimalMode(false)
+   │  ├─ setActiveId(null)
+   │  └─ Clear auto-scroll interval
+   ├─ Effect: Cards expand, no changes saved
+   └─ Trigger: ESC key or drag outside container
+```
+
+**STATE TRANSITIONS:**
+```
+STATE TRANSITION DIAGRAM:
+─────────────────────────
+Normal State
+    │
+    │ User presses drag handle
+    │
+    ▼
+Drag Start (8px movement)
+    │
+    │ setIsMinimalMode(true)
+    │ setActiveId(cardId)
+    │
+    ▼
+Minimal Mode Active
+    │
+    │ Cards shrink (200ms)
+    │ Placeholder appears
+    │ DragOverlay follows cursor
+    │
+    │ User drags card
+    │
+    ├─► Drop on valid target ──► handleDragEnd ──► Save order ──► Normal State
+    │
+    └─► Cancel (ESC) ──────────► handleDragCancel ───────────────► Normal State
+```
+
+---
+
+#### 4.7.11. Technical Implementation Details
+
+**COMPONENT ARCHITECTURE:**
+```
+COMPONENT STRUCTURE:
+├─ TripDetail.tsx (Parent Component)
+│  ├─ Manages: isMinimalMode, activeId state
+│  ├─ Contains: DndContext, SortableContext
+│  ├─ Renders: List of SortableCompactLocationCard
+│  ├─ Includes: DragOverlay component
+│  └─ Handles: All drag event handlers
+│
+├─ SortableCompactLocationCard.tsx (Wrapper Component)
+│  ├─ Purpose: Connects card to @dnd-kit sortable system
+│  ├─ Uses: useSortable hook from @dnd-kit/sortable
+│  ├─ Handles: Transform, transition, isDragging
+│  ├─ Renders: Placeholder when isActive === true
+│  └─ Props: isActive (controls placeholder display)
+│
+└─ CompactLocationCard.tsx (Content Component)
+   ├─ Purpose: Actual card content
+   ├─ Modes: Normal (full) vs Minimal
+   ├─ Props: isMinimalMode, sequenceNumber, isDragging
+   └─ Renders: Card content based on mode
+```
+
+**DRAGOVERLAY IMPLEMENTATION:**
+```
+DRAGOVERLAY CODE STRUCTURE:
+┌─────────────────────────────────────────┐
+│ <DragOverlay>                           │
+│   {activeId ? (() => {                  │
+│     const draggedLocation =             │
+│       filteredLocations.find(           │
+│         loc => loc.id === activeId      │
+│       )                                 │
+│     if (!draggedLocation) return null   │
+│                                         │
+│     const draggedIndex =                │
+│       filteredLocations.findIndex(     │
+│         loc => loc.id === activeId      │
+│       )                                 │
+│     const sequenceNumber =              │
+│       (isMinimalMode ||                │
+│        typeof selectedDay === 'number') │
+│         ? draggedIndex + 1              │
+│         : undefined                     │
+│                                         │
+│     return (                            │
+│       <CompactLocationCard             │
+│         location={draggedLocation}     │
+│         isDragging={true}               │
+│         isMinimalMode={isMinimalMode}   │
+│         sequenceNumber={sequenceNumber} │
+│         showDragHandle={...}            │
+│         // ... other props              │
+│       />                                │
+│     )                                   │
+│   })() : null}                          │
+│ </DragOverlay>                          │
+└─────────────────────────────────────────┘
+
+KEY POINTS:
+├─ Renders only when activeId !== null
+├─ Finds dragged location from filteredLocations
+├─ Calculates sequence number based on current position
+├─ Passes isDragging={true} for visual feedback
+├─ Maintains same props as original card
+└─ Automatically cleaned up when drag ends
+```
+
+**PLACEHOLDER IMPLEMENTATION:**
+```
+PLACEHOLDER CODE STRUCTURE:
+┌─────────────────────────────────────────┐
+│ {isActive ? (                           │
+│   <div className={                      │
+│     isMinimalMode                       │
+│       ? "h-12 bg-gray-100 border-2 " +  │
+│         "border-dashed border-gray-300 " │
+│         "rounded-lg"                    │
+│       : "min-h-[120px] bg-gray-100 " +  │
+│         "border-2 border-dashed " +     │
+│         "border-gray-300 rounded-lg"    │
+│   } />                                  │
+│ ) : (                                   │
+│   <CompactLocationCard                  │
+│     location={location}                 │
+│     isDragging={isDragging}             │
+│     // ... other props                  │
+│   />                                    │
+│ )}                                      │
+└─────────────────────────────────────────┘
+
+STYLE IMPLEMENTATION:
+├─ Original card: style={{ opacity: isActive ? 0 : undefined }}
+├─ Placeholder: Conditional rendering based on isActive
+├─ Height: Matches card mode (minimal vs full)
+└─ Visual: Dashed border indicates empty slot
+```
+
+**SORTABLECONTEXT CONFIGURATION:**
+```
+SORTABLECONTEXT SETUP:
+┌─────────────────────────────────────────┐
+│ <SortableContext                        │
+│   items={filteredLocations.map(         │
+│     loc => loc.id                       │
+│   )}                                    │
+│   strategy={verticalListSortingStrategy}│
+│ >                                       │
+│   {/* Cards */}                         │
+│ </SortableContext>                      │
+└─────────────────────────────────────────┘
+
+KEY CONFIGURATION:
+├─ items: Array of location IDs (strings)
+├─ strategy: verticalListSortingStrategy
+│  └─ Purpose: Optimized for vertical lists
+├─ Purpose: Enables sortable functionality
+└─ Required: Must wrap all sortable cards
+```
+
+**DNDCONTEXT CONFIGURATION:**
+```
+DNDCONTEXT SETUP:
+┌─────────────────────────────────────────┐
+│ <DndContext                             │
+│   collisionDetection={closestCenter}    │
+│   sensors={sensors}                     │
+│   modifiers={[restrictToVerticalAxis]}   │
+│   onDragStart={handleDragStart}         │
+│   onDragEnd={handleDragEnd}             │
+│   onDragCancel={handleDragCancel}       │
+│ >                                       │
+│   {/* SortableContext + Cards */}       │
+│   <DragOverlay>...</DragOverlay>        │
+│ </DndContext>                           │
+└─────────────────────────────────────────┘
+
+KEY CONFIGURATION:
+├─ collisionDetection: closestCenter
+│  └─ Purpose: Detect nearest drop target
+├─ sensors: PointerSensor with 8px activation
+│  └─ Purpose: Prevent accidental drags
+├─ modifiers: restrictToVerticalAxis
+│  └─ Purpose: Constrain to vertical movement
+└─ Event Handlers: All drag lifecycle events
+```
+
+---
+
+#### 4.7.12. Accessibility - Complete Support
+
+**KEYBOARD NAVIGATION:**
+```
+KEYBOARD SUPPORT:
+├─ Spacebar: Start drag (when drag handle focused)
+│  └─ Implementation: @dnd-kit keyboard sensor
+├─ Arrow Keys: Move card up/down (during drag)
+│  ├─ Up Arrow: Move card up one position
+│  └─ Down Arrow: Move card down one position
+├─ Enter: Confirm drop
+├─ ESC: Cancel drag
+│  └─ Effect: Returns card to original position
+└─ Tab: Navigate between cards
+   └─ Focus: Moves to next/previous card
+
+FOCUS MANAGEMENT:
+├─ Drag Handle: Focusable (tabIndex={0})
+├─ During Drag: Focus maintained on drag handle
+├─ After Drop: Focus returns to dropped card
+└─ After Cancel: Focus returns to original card
+```
+
+**ARIA LABELS:**
+```
+ARIA LABELS:
+├─ Drag Handle: 
+│  └─ "Drag to reorder {location name}, position {number}"
+├─ Card: 
+│  └─ "Location: {name}, press space to reorder"
+├─ Sequence Badge: 
+│  └─ "Position {number}"
+├─ Placeholder: 
+│  └─ Implicit (maintains focus order, no label needed)
+└─ DragOverlay: 
+   └─ Inherits from card (same ARIA labels)
+
+ROLES:
+├─ Drag Handle: role="button"
+├─ Card: role="listitem"
+└─ List: role="list" (implicit from SortableContext)
+```
+
+**SCREEN READER SUPPORT:**
+```
+SCREEN READER ANNOUNCEMENTS:
+├─ Drag Start: 
+│  └─ "Dragging {location name}"
+├─ Position Change: 
+│  └─ "Position {old} to {new}"
+├─ Drop: 
+│  └─ "Dropped {location name} at position {number}"
+└─ Cancel: 
+   └─ "Drag cancelled, {location name} returned to position {number}"
+
+LIVE REGIONS:
+├─ Status Updates: aria-live="polite"
+├─ Error Messages: aria-live="assertive"
+└─ Purpose: Announce state changes to screen readers
+```
+
+---
+
+#### 4.7.13. Performance Considerations
+
+**OPTIMIZATION STRATEGIES:**
+```
+PERFORMANCE OPTIMIZATIONS:
+├─ Transform-only animations (GPU accelerated)
+│  ├─ Uses: CSS transform property
+│  └─ Avoids: Layout reflow
+├─ No layout thrashing (transform, not position)
+│  ├─ Transform: GPU-accelerated
+│  └─ Position: Causes reflow
+├─ Debounced API calls (500ms delay)
+│  ├─ Purpose: Prevent rapid-fire API calls
+│  └─ Implementation: debounce utility function
+├─ Optimistic UI updates (immediate feedback)
+│  ├─ Purpose: Instant visual feedback
+│  └─ Fallback: Revert on API failure
+└─ Minimal re-renders (only active card changes)
+   ├─ React.memo: Used where appropriate
+   └─ State updates: Batched (React automatic batching)
+
+RENDERING OPTIMIZATIONS:
+├─ DragOverlay: Rendered outside list DOM (no reflow)
+│  └─ Portal-like rendering
+├─ Placeholder: Simple div (no complex content)
+│  └─ Minimal DOM nodes
+├─ Other cards: Transform only (no re-render)
+│  └─ CSS transform, not React state
+└─ State updates: Batched (React automatic batching)
+   └─ Multiple setState calls batched together
+```
+
+**MEMORY MANAGEMENT:**
+```
+MEMORY OPTIMIZATIONS:
+├─ Event Listeners: Cleaned up on unmount
+│  ├─ mousemove: Removed on drag end
+│  └─ setInterval: Cleared on drag end/cancel
+├─ Refs: Properly cleaned up
+│  └─ scrollContainerRef: No cleanup needed (React handles)
+└─ State: Reset on drag end/cancel
+   └─ Prevents memory leaks
+```
+
+---
+
+#### 4.7.14. Error Handling - Complete Scenarios
+
+**ERROR SCENARIOS:**
+```
+ERROR HANDLING:
+├─ API Failure:
+│  ├─ Action: Revert optimistic update
+│  ├─ Visual: Cards return to previous order
+│  ├─ Feedback: Error toast notification
+│  └─ State: isSavingOrder set to false
+│
+├─ Network Timeout:
+│  ├─ Action: Retry mechanism (debounced)
+│  ├─ Visual: Retry button appears
+│  ├─ Feedback: "Failed to save order" message
+│  └─ User Action: Click retry button
+│
+├─ Invalid Drop:
+│  ├─ Action: Cancel drag
+│  ├─ Visual: Cards return to original positions
+│  └─ Feedback: No toast (silent failure)
+│
+└─ Concurrent Drag Attempts:
+   ├─ Prevention: isSavingOrder disables sensors
+   ├─ Visual: Drag disabled during save
+   └─ Feedback: None (prevented, not error)
+
+ERROR RECOVERY:
+├─ Revert Logic: Restores previous order
+│  ├─ Source: previousOrder array (stored before API call)
+│  ├─ Method: setLocations with previous order
+│  └─ Visual: Cards animate back to original positions
+├─ Retry Mechanism: User-initiated
+│  ├─ Button: "Retry" in error banner
+│  ├─ Action: Re-attempt API call
+│  └─ Debounce: 500ms delay
+└─ State Cleanup: Always executed
+   ├─ isSavingOrder: Set to false
+   └─ Error state: Cleared on success
+```
+
+---
+
+#### 4.7.15. Testing Scenarios - Complete Checklist
+
+**TEST CASES:**
+```
+TESTING CHECKLIST:
+├─ Basic Drag:
+│  ├─ Card follows cursor smoothly ✓
+│  ├─ Placeholder appears correctly ✓
+│  ├─ Other cards shift appropriately ✓
+│  ├─ Sequence numbers update correctly ✓
+│  └─ Order saves correctly ✓
+│
+├─ Edge Cases:
+│  ├─ Drag to top of list ✓
+│  ├─ Drag to bottom of list ✓
+│  ├─ Drag outside viewport (auto-scroll) ✓
+│  ├─ Cancel drag (ESC key) ✓
+│  ├─ Drop on same position (no-op) ✓
+│  └─ Rapid drag movements ✓
+│
+├─ Visual Feedback:
+│  ├─ Blue outline on dragged card ✓
+│  ├─ Reduced opacity (60%) ✓
+│  ├─ No rotation ✓
+│  ├─ Smooth animations (200ms) ✓
+│  ├─ Placeholder shows correctly ✓
+│  └─ Cards shrink/expand simultaneously ✓
+│
+├─ State Management:
+│  ├─ Minimal mode activates correctly ✓
+│  ├─ Minimal mode deactivates correctly ✓
+│  ├─ Sequence numbers update ✓
+│  ├─ ActiveId tracks correctly ✓
+│  └─ No memory leaks ✓
+│
+└─ Error Scenarios:
+   ├─ API failure handled ✓
+   ├─ Network timeout handled ✓
+   ├─ Invalid drop handled ✓
+   └─ Concurrent drag prevented ✓
+```
+
+**PERFORMANCE TESTS:**
+```
+PERFORMANCE TESTING:
+├─ Large Lists (50+ items):
+│  ├─ Smooth scrolling ✓
+│  ├─ No lag during drag ✓
+│  └─ Memory usage acceptable ✓
+│
+├─ Rapid Interactions:
+│  ├─ Multiple drags in quick succession ✓
+│  ├─ No state corruption ✓
+│  └─ Proper cleanup ✓
+│
+└─ Long Drag Sessions:
+   ├─ Auto-scroll works correctly ✓
+   └─ No performance degradation ✓
+```
+
+---
+
+**END OF SECTION 4.7**
 
 ---
 

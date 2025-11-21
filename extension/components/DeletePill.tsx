@@ -42,18 +42,18 @@ export function DeletePill({ onConfirm, onCancel, position = 'bottom-right' }: D
   return (
     <div
       ref={pillRef}
-      className={`${positionClasses} flex border border-gray-300 rounded-full overflow-hidden shadow-md animate-[pillFadeIn_200ms_ease-out] z-10`}
+      className={`${positionClasses} flex border border-gray-300 rounded-full overflow-hidden shadow-md animate-[pillFadeIn_200ms_ease-out] z-10 h-6`}
     >
       <button
         onClick={onConfirm}
-        className="px-3 py-1 bg-white hover:bg-green-500 hover:text-white transition-colors duration-150 text-base"
+        className="px-2 py-0.5 bg-white hover:bg-green-500 hover:text-white transition-colors duration-150 text-sm flex items-center justify-center h-full"
         title="Confirm delete"
       >
         ✅
       </button>
       <button
         onClick={onCancel}
-        className="px-3 py-1 bg-white hover:bg-red-500 hover:text-white transition-colors duration-150 text-base border-l border-gray-300"
+        className="px-2 py-0.5 bg-white hover:bg-red-500 hover:text-white transition-colors duration-150 text-sm border-l border-gray-300 flex items-center justify-center h-full"
         title="Cancel"
       >
         ❌
