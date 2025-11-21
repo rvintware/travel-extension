@@ -16,7 +16,6 @@ interface CompactLocationCardProps {
   showDragHandle?: boolean
   isMinimalMode?: boolean
   sequenceNumber?: number
-  isDraggedCard?: boolean
 }
 
 export function CompactLocationCard({
@@ -29,8 +28,7 @@ export function CompactLocationCard({
   dragHandleProps,
   showDragHandle,
   isMinimalMode = false,
-  sequenceNumber,
-  isDraggedCard = false
+  sequenceNumber
 }: CompactLocationCardProps) {
   const [showDeletePill, setShowDeletePill] = useState(false)
   const domain = getDomain(location.source_url)
@@ -121,7 +119,7 @@ export function CompactLocationCard({
         )}
         
         {/* Location Name */}
-        <h3 className="flex-1 text-sm font-medium text-gray-900 truncate ml-8">
+        <h3 className="flex-1 text-sm font-medium text-gray-900 truncate">
           {location.name}
         </h3>
         
@@ -159,7 +157,7 @@ export function CompactLocationCard({
       <div className="p-3">
         {/* Line 1: Location Name + Sequence Badge + KebabMenu */}
         <div className="flex items-start justify-between gap-2 mb-2">
-          <h3 className="text-lg font-semibold text-gray-900 flex-1 leading-tight ml-8">
+          <h3 className="text-lg font-semibold text-gray-900 flex-1 leading-tight">
             {location.name}
           </h3>
           <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
@@ -231,22 +229,22 @@ export function CompactLocationCard({
             </a>
           )}
           
-          {/* Delete Button - Inline with Google Maps */}
-          {!showDeletePill && onDelete && (
-            <button
-              onClick={(e) => {
-                e.stopPropagation()
-                setShowDeletePill(true)
-              }}
-              className="text-xl text-gray-400 hover:text-red-500 transition-colors z-10"
-              title="Remove from trip"
-              aria-label="Remove from trip"
-            >
-              🗑️
-            </button>
-          )}
-          {showDeletePill && onDelete && (
-            <div onClick={(e) => e.stopPropagation()}>
+          {/* Delete Button / DeletePill - Fixed height container to prevent card size change */}
+          <div className="h-6 flex items-center justify-end flex-shrink-0" onClick={(e) => e.stopPropagation()}>
+            {!showDeletePill && onDelete && (
+              <button
+                onClick={(e) => {
+                  e.stopPropagation()
+                  setShowDeletePill(true)
+                }}
+                className="text-xl text-gray-400 hover:text-red-500 transition-colors z-10 flex items-center justify-center h-6"
+                title="Remove from trip"
+                aria-label="Remove from trip"
+              >
+                🗑️
+              </button>
+            )}
+            {showDeletePill && onDelete && (
               <DeletePill
                 onConfirm={() => {
                   setShowDeletePill(false)
@@ -255,8 +253,8 @@ export function CompactLocationCard({
                 onCancel={() => setShowDeletePill(false)}
                 position="inline"
               />
-            </div>
-          )}
+            )}
+          </div>
         </div>
       </div>
     </div>

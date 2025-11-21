@@ -731,16 +731,24 @@ No sequence numbers visible.
 ```
 Cards shrink to minimal view during drag:
 ┌─────────────────────────────────────────┐
-│     [≡]  Fukuoka                  [1]  │ ← Dragged card: blue outline, reduced opacity
-└─────────────────────────────────────────┘   (follows cursor, no rotation)
+│         [≡]                             │ ← Drag handle (centered, absolute)
+│         ↑                                │   Doesn't take layout space
+│                                         │
+│ Fukuoka                         [1]  │ ← Dragged card: blue outline, reduced opacity
+│ ↑                                         │   (follows cursor, no rotation)
+└─────────────────────────────────────────┘   (name left-aligned, no margin)
 (height: 48px)
 
 ┌─────────────────────────────────────────┐
-│     [≡]  Tokyo                    [2]  │
+│         [≡]                             │
+│ Tokyo                           [2]    │
+│ ↑                                         │
 └─────────────────────────────────────────┘
 
 ┌─────────────────────────────────────────┐
-│     [≡]  Osaka                    [3]  │
+│         [≡]                             │
+│ Osaka                           [3]    │
+│ ↑                                         │
 └─────────────────────────────────────────┘
 
 User can see 10-15 locations at once.
@@ -748,6 +756,7 @@ Sequence numbers update in real-time.
 Dragged card has blue outline and reduced opacity.
 Card follows cursor smoothly during drag.
 Drag handle moved to center-top.
+Location name is left-aligned in all states.
 ```
 
 **Key Changes:**

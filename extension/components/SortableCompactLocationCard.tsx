@@ -43,7 +43,6 @@ export function SortableCompactLocationCard({
     opacity: isActive ? 0 : undefined,
   }
 
-  const totalLocations = 0 // This would need to be passed as prop if we want accurate count
   const ariaLabel = isMinimalMode && sequenceNumber !== undefined
     ? `Location: ${location.name}, position ${sequenceNumber}, press space to reorder`
     : `Location: ${location.name}, press space to reorder`

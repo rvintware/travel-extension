@@ -397,9 +397,25 @@ CARD SPECIFICATIONS:
 ├─ Shadow: shadow-card, hover:shadow-card-hover
 ├─ Cursor: cursor-pointer (entire card clickable)
 │
-├─ Line 1: Location Name + KebabMenu
-│  ├─ Layout: flex justify-between
-│  ├─ Name: text-lg, font-semibold, text-gray-900
+├─ Drag Handle (Center-Top) - Only when showDragHandle === true
+│  ├─ Position: absolute top-2 left-1/2 -translate-x-1/2
+│  ├─ Icon: ≡≡ (double equals)
+│  ├─ Size: text-lg (18px)
+│  ├─ Color: text-gray-400
+│  ├─ Cursor: cursor-grab → cursor-grabbing
+│  ├─ Z-index: z-10
+│  └─ Layout: Absolutely positioned, doesn't affect text alignment
+│
+├─ Line 1: Location Name + Sequence Badge + KebabMenu
+│  ├─ Container: flex items-start justify-between gap-2 mb-2
+│  ├─ Name: text-lg font-semibold text-gray-900 flex-1 leading-tight
+│  │  ├─ Alignment: Left-aligned (no margin-left)
+│  │  └─ Layout: Starts at left edge of padding
+│  ├─ Sequence Badge: Only when showDragHandle === true
+│  │  ├─ Position: Before KebabMenu, right-aligned
+│  │  ├─ Format: Plain number (1, 2, 3, etc.)
+│  │  ├─ Style: bg-gray-100 text-gray-700 px-2 py-0.5 rounded text-xs font-medium
+│  │  └─ Layout: flex items-center gap-2 with KebabMenu
 │  └─ KebabMenu: Right-aligned, stops propagation
 │
 ├─ Line 2: Day Badge (conditional)
@@ -459,19 +475,24 @@ MINIMAL CARD MODE (During Drag Reordering)
 ════════════════════════════════════════════
 
 ┌─────────────────────────────────────────────┐
-│         [≡]  Location Name          [1]    │ ← 48px height
-│         ↑                                  │
-│    Drag handle (center-top)                │
-│                              Sequence badge │
+│         [≡]                                 │ ← Drag handle (centered, absolute)
+│         ↑                                    │   Doesn't take layout space
+│                                             │
+│ Location Name                      [1]    │ ← 48px height
+│ ↑                                         │   (name left-aligned, no margin)
 └─────────────────────────────────────────────┘
 
 ┌─────────────────────────────────────────────┐
-│         [≡]  Another Location        [2]    │
+│         [≡]                                 │
+│ Another Location                    [2]    │
+│ ↑                                         │
 └─────────────────────────────────────────────┘
 
 ┌─────────────────────────────────────────────┐
-│    [≡]  Third Location (dragged)     [3]  │ ← Blue outline, reduced opacity
-└─────────────────────────────────────────────┘   (follows cursor, no rotation)
+│         [≡]                                 │
+│ Third Location (dragged)            [3]  │ ← Blue outline, reduced opacity
+│ ↑                                         │   (follows cursor, no rotation)
+└─────────────────────────────────────────────┘
 ```
 
 MINIMAL CARD SPECIFICATIONS:
@@ -480,6 +501,7 @@ MINIMAL CARD SPECIFICATIONS:
 ├─ Padding: px-3 py-2 (12px horizontal, 8px vertical)
 ├─ Shadow: shadow-sm (lighter than full card)
 ├─ Transition: transition-all duration-200 ease-in-out
+├─ Layout: flex items-center justify-between
 │
 ├─ Drag Handle (Center-Top)
 │  ├─ Position: absolute top-2 left-1/2 -translate-x-1/2
@@ -487,14 +509,16 @@ MINIMAL CARD SPECIFICATIONS:
 │  ├─ Size: text-lg
 │  ├─ Color: text-gray-400
 │  ├─ Cursor: cursor-grab → cursor-grabbing
-│  └─ Z-index: z-10
+│  ├─ Z-index: z-10
+│  └─ Layout: Absolutely positioned, doesn't affect text alignment
 │
 ├─ Location Name
-│  ├─ Position: Left-aligned with ml-8 (32px margin for handle)
+│  ├─ Position: Left-aligned (no margin-left)
 │  ├─ Font: text-sm font-medium
 │  ├─ Color: text-gray-900
 │  ├─ Truncation: truncate (ellipsis for overflow)
-│  └─ Layout: flex-1 (takes available space)
+│  ├─ Layout: flex-1 (takes available space)
+│  └─ Alignment: Starts at left edge of padding (px-3 = 12px from card edge)
 │
 └─ Sequence Badge
    ├─ Position: Right-aligned
@@ -567,8 +591,11 @@ COMPACT LOCATION CARD (Normal State - Not Dragging)
 ════════════════════════════════════════════════════
 
 ┌─────────────────────────────────────────┐
-│ [≡]  Fukuoka                    [1] [⋮]│ ← Line 1: Drag Handle + Name + Sequence + KebabMenu
-│      ↑                                  │   (drag handle center-top, sequence badge top-right)
+│         [≡]                             │ ← Drag handle (centered, absolute)
+│         ↑                                │   Doesn't take layout space
+│                                         │
+│ King Fish                      [1] [⋮] │ ← Line 1: Name + Sequence + KebabMenu
+│ ↑                                         │   (name left-aligned, no margin)
 │                                         │
 │ [Day 3]                                 │ ← Line 2: Day Badge (conditional)
 │                                         │   (bg-primary, rounded-full)
@@ -600,12 +627,15 @@ VISUAL SPECIFICATIONS:
 │  ├─ Color: text-gray-400
 │  ├─ Cursor: cursor-grab → cursor-grabbing (on active)
 │  ├─ Z-index: z-10
-│  └─ Click: Stops propagation, starts drag
+│  ├─ Click: Stops propagation, starts drag
+│  └─ Layout: Absolutely positioned, doesn't affect text alignment
 │
 ├─ Line 1: Location Name + Sequence Badge + KebabMenu
 │  ├─ Container: flex items-start justify-between gap-2 mb-2
-│  ├─ Name: text-lg font-semibold text-gray-900 flex-1 ml-8
-│  │  └─ Margin-left: ml-8 (32px) to accommodate drag handle
+│  ├─ Name: text-lg font-semibold text-gray-900 flex-1 leading-tight
+│  │  ├─ Alignment: Left-aligned (no margin-left)
+│  │  ├─ Layout: Starts at left edge of padding (p-3 = 12px from card edge)
+│  │  └─ Note: Drag handle is absolutely positioned, so no margin needed
 │  ├─ Sequence Badge: Only when showDragHandle === true
 │  │  ├─ Position: Before KebabMenu, right-aligned
 │  │  ├─ Format: Plain number (1, 2, 3, etc.)
@@ -650,6 +680,7 @@ VISUAL SPECIFICATIONS:
 - All cards display full content
 - Drag handles visible (when viewing specific day)
 - Sequence badges visible (when viewing specific day)
+- Location name is left-aligned in all cases (no margin)
 - All interactions enabled (click, kebab menu, delete, etc.)
 
 ---
@@ -661,18 +692,23 @@ MINIMAL CARD MODE (During Drag Reordering - ALL Cards Shrink)
 ═════════════════════════════════════════════════════════════
 
 ┌─────────────────────────────────────────────┐
-│         [≡]  Location Name          [1]    │ ← 48px height (h-12)
-│         ↑                                  │
-│    Drag handle (center-top)                │
-│                              Sequence badge │
+│         [≡]                                 │ ← Drag handle (centered, absolute)
+│         ↑                                    │   Doesn't take layout space
+│                                             │
+│ Location Name                      [1]    │ ← 48px height (h-12)
+│ ↑                                         │   (name left-aligned, no margin)
 └─────────────────────────────────────────────┘
 
 ┌─────────────────────────────────────────────┐
-│         [≡]  Another Location        [2]    │
+│         [≡]                                 │
+│ Another Location                    [2]    │
+│ ↑                                         │
 └─────────────────────────────────────────────┘
 
 ┌─────────────────────────────────────────────┐
-│         [≡]  Third Location          [3]    │
+│         [≡]                                 │
+│ Third Location                      [3]    │
+│ ↑                                         │
 └─────────────────────────────────────────────┘
 
 VISUAL SPECIFICATIONS:
@@ -689,14 +725,16 @@ VISUAL SPECIFICATIONS:
 │  ├─ Size: text-lg (18px)
 │  ├─ Color: text-gray-400
 │  ├─ Cursor: cursor-grab → cursor-grabbing
-│  └─ Z-index: z-10
+│  ├─ Z-index: z-10
+│  └─ Layout: Absolutely positioned, doesn't affect text alignment
 │
 ├─ Location Name
-│  ├─ Position: Left-aligned with ml-8 (32px margin for handle)
+│  ├─ Position: Left-aligned (no margin-left)
 │  ├─ Font: text-sm font-medium
 │  ├─ Color: text-gray-900
 │  ├─ Truncation: truncate (ellipsis for overflow)
-│  └─ Layout: flex-1 (takes available space)
+│  ├─ Layout: flex-1 (takes available space)
+│  └─ Alignment: Starts at left edge of padding (px-3 = 12px from card edge)
 │
 └─ Sequence Badge
    ├─ Position: Right-aligned
@@ -720,8 +758,8 @@ CONTENT HIDDEN IN MINIMAL MODE:
 └─ KebabMenu (hidden)
 
 CONTENT VISIBLE IN MINIMAL MODE:
-├─ Drag Handle (always visible)
-├─ Location Name (truncated if needed)
+├─ Drag Handle (always visible, absolutely positioned)
+├─ Location Name (truncated if needed, left-aligned, no margin)
 └─ Sequence Badge (always visible)
 ```
 

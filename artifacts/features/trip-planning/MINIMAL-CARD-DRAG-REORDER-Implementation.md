@@ -231,28 +231,32 @@ const sensors = useSensors(
 #### Layout Structure
 ```
 ┌─────────────────────────────────────────────┐
-│         [≡]  Location Name          [1]    │
-│         ↑                                  │
-│    Drag handle (center-top)                │
-│                              Sequence badge │
+│         [≡]                                 │ ← Drag handle (centered, absolute)
+│         ↑                                    │   Doesn't take layout space
+│                                             │
+│ Location Name                      [1]    │ ← Name left-aligned, no margin
+│ ↑                                         │
 └─────────────────────────────────────────────┘
 ```
 
 #### Components
 
 **1. Drag Handle**
-- **Position:** Center-top (`top-2 left-1/2 -translate-x-1/2`)
+- **Position:** Center-top (`absolute top-2 left-1/2 -translate-x-1/2`)
 - **Icon:** `≡≡` (double equals)
 - **Size:** `text-lg`
 - **Color:** `text-gray-400`
 - **Cursor:** `cursor-grab` → `cursor-grabbing` on active
 - **Z-index:** `z-10` (above other elements)
+- **Layout:** Absolutely positioned, doesn't affect text alignment
 
 **2. Location Name**
-- **Position:** Left-aligned with `ml-8` (32px left margin for handle)
+- **Position:** Left-aligned (no margin-left)
 - **Font:** `text-sm font-medium`
 - **Color:** `text-gray-900`
 - **Truncation:** `truncate` (ellipsis for long names)
+- **Layout:** `flex-1` (takes available space)
+- **Alignment:** Starts at left edge of padding (px-3 = 12px from card edge)
 
 **3. Sequence Badge**
 - **Position:** Right-aligned
