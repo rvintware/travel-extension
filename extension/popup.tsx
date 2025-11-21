@@ -492,6 +492,10 @@ function IndexPopup() {
           onBack={handleBackToList}
           onAddToTrip={handleAddToTrip}
           onDelete={handleLocationDeleted}
+          onLocationClick={(location) => handleLocationClick(
+            location as LocationWithTripData,
+            { view: 'countryDetail' }
+          )}
           onLocationAddedToTrip={(tripId) => {
             // OPTIMISTIC UPDATE - Increment location count for the affected trip immediately
             setTrips(prev => prev.map(trip => {

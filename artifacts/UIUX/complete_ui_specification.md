@@ -468,6 +468,122 @@ SEQUENCE BADGE (Full Card Mode):
 
 ---
 
+### 4.5.1. Compact Location Card - Country Detail View
+
+```
+COMPACT LOCATION CARD (Country Detail View)
+════════════════════════════════════════════
+
+┌─────────────────────────────────────────┐
+│                                         │
+│ Fukuoka Asian Art Museum            [⋮]│ ← Line 1: Name + KebabMenu
+│ ↑                                         │   (name left-aligned, no drag handle)
+│                                         │   (no sequence badge)
+│                                         │
+│ 📍 Fukuoka, Japan                      │ ← Line 2: Address (conditional)
+│                                         │   (text-sm, text-gray-600)
+│                                         │
+│ 🔴 reddit.com →                        │ ← Line 3: Reddit link (standalone)
+│                                         │   (text-sm, text-primary)
+│                                         │   (hover:text-primary-dark)
+│                                         │
+│ 🗺️ View on Maps →                      │ ← Line 4: Google Maps link (standalone)
+│                                         │   (text-sm, text-primary)
+│                                         │   (hover:text-primary-dark)
+│                                         │
+│ [Add to Trip]                    🗑️ │ ← Line 5: Add to Trip + Trash
+│ ↑                                         │   (left: Add to Trip button)
+│                                         │   (right: Trash icon)
+└─────────────────────────────────────────┘
+
+KEY DIFFERENCES FROM TRIP DETAIL VIEW:
+═══════════════════════════════════════════
+
+❌ NOT VISIBLE:
+├─ Drag Handle (no [≡] icon)
+├─ Sequence Badge (no [1] badge)
+└─ Day Badge (no [Day 1] badge)
+
+✅ VISIBLE:
+├─ Location Name (left-aligned)
+├─ KebabMenu (⋮) with only "Edit Location" option
+├─ Address (if available)
+├─ Reddit Link (standalone line)
+├─ Google Maps Link (standalone line)
+├─ "Add to Trip" Button (left-aligned, bottom line)
+└─ Trash Icon (right-aligned, same line as "Add to Trip")
+
+LAYOUT SPECIFICATIONS:
+═══════════════════════
+
+Line 1: Location Name + KebabMenu
+├─ Container: flex items-start justify-between gap-2 mb-2
+├─ Name: text-lg font-semibold text-gray-900 flex-1 leading-tight
+│  ├─ Alignment: Left-aligned (no margin-left)
+│  └─ Layout: Starts at left edge of padding
+└─ KebabMenu: Right-aligned, stops propagation
+   └─ Options: Only "Edit Location" (no "Assign to Day")
+
+Line 2: Day Badge
+└─ NOT VISIBLE (Location type doesn't have dayNumber)
+
+Line 3: Address (conditional)
+├─ Display: Only if location.address exists
+├─ Icon: 📍 emoji
+├─ Text: text-sm text-gray-600
+└─ Margin: mb-3 (12px bottom)
+
+Line 4: Reddit Link (standalone)
+├─ Layout: Standalone line, left-aligned
+├─ Icon: Source emoji (🔴 for reddit.com)
+├─ Text: Domain name + → arrow
+├─ Styling: text-sm text-primary hover:text-primary-dark
+└─ Margin: mb-2 (8px bottom)
+
+Line 5: Google Maps Link (standalone)
+├─ Layout: Standalone line, left-aligned
+├─ Display: Only if googleMapsUrl exists
+├─ Icon: 🗺️ emoji
+├─ Text: "View on Maps" + → arrow
+├─ Styling: text-sm text-primary hover:text-primary-dark
+└─ Margin: mb-2 (8px bottom)
+
+Line 6: Add to Trip Button + Trash Icon (same line)
+├─ Container: flex items-center justify-between gap-2
+├─ Left: Add to Trip Button
+│  ├─ Style: bg-primary text-white px-4 py-2 rounded-lg font-medium hover:bg-primary-dark transition-colors
+│  ├─ Text: "Add to Trip"
+│  ├─ Position: Left-aligned
+│  └─ Action: Opens AddToTripModal
+└─ Right: Trash icon
+   ├─ Display: Only if onDelete exists
+   ├─ Icon: 🗑️ emoji
+   ├─ Styling: text-xl text-gray-400 hover:text-red-500
+   └─ Click: Opens DeletePill (position="inline")
+
+SPACING BETWEEN CARDS:
+══════════════════════
+├─ Container: space-y-6 (24px vertical spacing)
+└─ Matches TripDetail view spacing
+
+CARD INTERACTIONS:
+═══════════════════
+├─ Click on card body → Navigate to LocationDetailView
+├─ Click "Add to Trip" → Opens AddToTripModal
+├─ Click KebabMenu → Shows "Edit Location" option
+├─ Click "Edit Location" → Opens LocationEditModal
+├─ Click Trash → Shows DeletePill (✅/❌)
+└─ Click DeletePill → Deletes location (with confirmation)
+
+TYPE SUPPORT:
+═════════════
+├─ Accepts: Location | LocationWithTripData
+├─ Country context: Uses Location type (no trip-specific fields)
+└─ Trip context: Uses LocationWithTripData type (includes dayNumber, etc.)
+```
+
+---
+
 ### 4.6. Minimal Card Mode - Drag Reordering
 
 ```

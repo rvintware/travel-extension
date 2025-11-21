@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react'
 import type { Country, Location, Trip } from '../lib/types'
-import { LocationCard } from '../components/LocationCard'
+import { CompactLocationCard } from '../components/CompactLocationCard'
 import type { GearAction } from '../components/GearMenu'
 import { AddToTripModal } from '../components/AddToTripModal'
 import { LocationEditModal } from '../components/LocationEditModal'
@@ -16,9 +16,10 @@ interface CountryDetailProps {
   onAddToTrip: (location: Location) => void
   onDelete: (location: Location) => void
   onLocationAddedToTrip?: (tripId: string) => void  // Callback to notify parent when location is added
+  onLocationClick?: (location: Location) => void  // Navigation callback
 }
 
-export function CountryDetail({ country, trips, onBack, onAddToTrip, onDelete, onLocationAddedToTrip }: CountryDetailProps) {
+export function CountryDetail({ country, trips, onBack, onAddToTrip, onDelete, onLocationAddedToTrip, onLocationClick }: CountryDetailProps) {
   const [locations, setLocations] = useState<Location[]>([])
   const [loading, setLoading] = useState(true)
   const [refreshing, setRefreshing] = useState(false)
@@ -212,10 +213,9 @@ export function CountryDetail({ country, trips, onBack, onAddToTrip, onDelete, o
         ) : (
           <div className="p-4 space-y-6">
             {locations.map(location => (
-              <LocationCard
+              <CompactLocationCard
                 key={location.id}
                 location={location}
-                context="library"
                 onAction={(action, data) => {
                   if (action === 'edit-location') {
                     setSelectedLocation(location)
@@ -224,6 +224,7 @@ export function CountryDetail({ country, trips, onBack, onAddToTrip, onDelete, o
                 }}
                 onAddToTrip={() => handleAddToTripClick(location)}
                 onDelete={() => handleDelete(location)}
+                onLocationClick={onLocationClick ? () => onLocationClick(location) : undefined}
               />
             ))}
           </div>

@@ -1,16 +1,17 @@
 import React, { useState } from 'react'
-import type { LocationWithTripData } from '../lib/types'
+import type { Location, LocationWithTripData } from '../lib/types'
 import { getDomain, getSourceEmoji } from '../lib/utils'
 import { KebabMenu, type KebabMenuOption } from './KebabMenu'
 import { DeletePill } from './DeletePill'
 import type { GearAction } from './GearMenu'
 
 interface CompactLocationCardProps {
-  location: LocationWithTripData
+  location: Location | LocationWithTripData
   days?: number[]
   onAction: (action: GearAction, data?: any) => void
   onDelete?: () => void
-  onLocationClick?: (location: LocationWithTripData) => void
+  onLocationClick?: (location: Location | LocationWithTripData) => void
+  onAddToTrip?: () => void
   isDragging?: boolean
   dragHandleProps?: any
   showDragHandle?: boolean
@@ -24,6 +25,7 @@ export function CompactLocationCard({
   onAction,
   onDelete,
   onLocationClick,
+  onAddToTrip,
   isDragging,
   dragHandleProps,
   showDragHandle,
@@ -169,7 +171,7 @@ export function CompactLocationCard({
             )}
             <KebabMenu
               options={buildKebabMenuOptions()}
-              currentDay={location.dayNumber || null}
+              currentDay={(location as LocationWithTripData).dayNumber || null}
               onAction={(optionId, data) => {
                 if (optionId === 'assign-day') {
                   onAction('move-to-day', data === 'null' ? null : parseInt(data))
@@ -182,10 +184,10 @@ export function CompactLocationCard({
         </div>
 
         {/* Line 2: Day Badge */}
-        {location.dayNumber && (
+        {(location as LocationWithTripData).dayNumber && (
           <div className="mb-2">
             <div className="inline-block bg-primary text-white px-2 py-1 rounded-full text-xs font-medium">
-              Day {location.dayNumber}
+              Day {(location as LocationWithTripData).dayNumber}
             </div>
           </div>
         )}
@@ -213,9 +215,9 @@ export function CompactLocationCard({
           </a>
         </div>
 
-        {/* Line 5: Google Maps Link + Trash Icon (same line) */}
-        <div className="flex items-center justify-between gap-2">
-          {googleMapsUrl && (
+        {/* Line 5: Google Maps Link + Trash Icon (same line when onAddToTrip NOT provided) */}
+        {googleMapsUrl && !onAddToTrip && (
+          <div className="flex items-center justify-between gap-2 mb-2">
             <a
               href={googleMapsUrl}
               target="_blank"
@@ -227,35 +229,95 @@ export function CompactLocationCard({
               <span>View on Maps</span>
               <span>→</span>
             </a>
-          )}
-          
-          {/* Delete Button / DeletePill - Fixed height container to prevent card size change */}
-          <div className="h-6 flex items-center justify-end flex-shrink-0" onClick={(e) => e.stopPropagation()}>
-            {!showDeletePill && onDelete && (
-              <button
-                onClick={(e) => {
-                  e.stopPropagation()
-                  setShowDeletePill(true)
-                }}
-                className="text-xl text-gray-400 hover:text-red-500 transition-colors z-10 flex items-center justify-center h-6"
-                title="Remove from trip"
-                aria-label="Remove from trip"
-              >
-                🗑️
-              </button>
-            )}
-            {showDeletePill && onDelete && (
-              <DeletePill
-                onConfirm={() => {
-                  setShowDeletePill(false)
-                  onDelete()
-                }}
-                onCancel={() => setShowDeletePill(false)}
-                position="inline"
-              />
-            )}
+            
+            {/* Delete Button / DeletePill - Right-aligned, aligned with map link text */}
+            <div className="h-6 flex items-center justify-end flex-shrink-0" onClick={(e) => e.stopPropagation()}>
+              {!showDeletePill && onDelete && (
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    setShowDeletePill(true)
+                  }}
+                  className="text-xl text-gray-400 hover:text-red-500 transition-colors z-10 flex items-center justify-center h-6"
+                  title="Remove from trip"
+                  aria-label="Remove from trip"
+                >
+                  🗑️
+                </button>
+              )}
+              {showDeletePill && onDelete && (
+                <DeletePill
+                  onConfirm={() => {
+                    setShowDeletePill(false)
+                    onDelete()
+                  }}
+                  onCancel={() => setShowDeletePill(false)}
+                  position="inline"
+                />
+              )}
+            </div>
           </div>
-        </div>
+        )}
+
+        {/* Line 5: Google Maps Link (standalone when onAddToTrip IS provided) */}
+        {googleMapsUrl && onAddToTrip && (
+          <div className="mb-2">
+            <a
+              href={googleMapsUrl}
+              target="_blank"
+              rel="noopener noreferrer"
+              className="text-sm text-primary hover:text-primary-dark transition-colors flex items-center gap-1"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <span>🗺️</span>
+              <span>View on Maps</span>
+              <span>→</span>
+            </a>
+          </div>
+        )}
+
+        {/* Line 6: Add to Trip Button + Trash Icon (same line) - Only when onAddToTrip provided */}
+        {onAddToTrip && (
+          <div className="flex items-center justify-between gap-2">
+            <button
+              onClick={(e) => {
+                e.stopPropagation()
+                onAddToTrip()
+              }}
+              className="bg-primary text-white px-4 py-2 rounded-lg font-medium hover:bg-primary-dark transition-colors"
+              aria-label="Add to trip"
+            >
+              Add to Trip
+            </button>
+            
+            {/* Delete Button / DeletePill - Fixed height container to prevent card size change */}
+            <div className="h-6 flex items-center justify-end flex-shrink-0" onClick={(e) => e.stopPropagation()}>
+              {!showDeletePill && onDelete && (
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation()
+                    setShowDeletePill(true)
+                  }}
+                  className="text-xl text-gray-400 hover:text-red-500 transition-colors z-10 flex items-center justify-center h-6"
+                  title="Remove from trip"
+                  aria-label="Remove from trip"
+                >
+                  🗑️
+                </button>
+              )}
+              {showDeletePill && onDelete && (
+                <DeletePill
+                  onConfirm={() => {
+                    setShowDeletePill(false)
+                    onDelete()
+                  }}
+                  onCancel={() => setShowDeletePill(false)}
+                  position="inline"
+                />
+              )}
+            </div>
+          </div>
+        )}
       </div>
     </div>
   )

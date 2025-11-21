@@ -783,5 +783,56 @@ Location name is left-aligned in all states.
 
 ---
 
+---
+
+## 15. CompactLocationCard in Country Detail View
+
+### BEFORE (LocationCard)
+```
+Detailed card with image, tips, full content
+Large card taking up significant space
+"Add to Trip" button in different location
+Different styling from trip detail view
+```
+
+### AFTER (CompactLocationCard)
+```
+Compact card matching trip detail view:
+┌─────────────────────────────────────────┐
+│ Fukuoka Asian Art Museum            [⋮]│
+│                                         │
+│ 📍 Fukuoka, Japan                      │
+│ 🔴 reddit.com →                        │
+│ 🗺️ View on Maps →                      │
+│ [Add to Trip]                    🗑️ │
+└─────────────────────────────────────────┘
+
+Consistent with trip detail view design.
+"Add to Trip" button at bottom, left-aligned.
+Trash icon right-aligned, same line.
+No day badge, drag handle, or sequence badge.
+Kebab menu shows only "Edit Location".
+```
+
+**Key Changes:**
+- ✨ Replaced LocationCard with CompactLocationCard
+- ✨ Consistent design with trip detail view
+- ✨ "Add to Trip" button at bottom, left-aligned
+- ✨ Trash icon right-aligned, same line as "Add to Trip"
+- ✨ No day badge (Location type doesn't have dayNumber)
+- ✨ No drag handle (showDragHandle not passed)
+- ✨ No sequence badge (showDragHandle not passed)
+- ✨ Kebab menu shows only "Edit Location" (no "Assign to Day")
+- ✨ Clicking card navigates to LocationDetailView
+- ✨ Spacing matches trip detail view (space-y-6)
+
+**Technical Details:**
+- Type support: Accepts Location | LocationWithTripData
+- Conditional rendering: Day badge, drag handle, sequence badge hidden in country context
+- Navigation: onLocationClick callback with return path to countryDetail
+- Kebab menu: Only shows "Edit Location" when days prop is not provided
+
+---
+
 **Use this guide alongside the full specification for implementation.**
 
