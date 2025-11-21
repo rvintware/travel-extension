@@ -14,6 +14,9 @@ interface CompactLocationCardProps {
   isDragging?: boolean
   dragHandleProps?: any
   showDragHandle?: boolean
+  isMinimalMode?: boolean
+  sequenceNumber?: number
+  isDraggedCard?: boolean
 }
 
 export function CompactLocationCard({
@@ -24,7 +27,10 @@ export function CompactLocationCard({
   onLocationClick,
   isDragging,
   dragHandleProps,
-  showDragHandle
+  showDragHandle,
+  isMinimalMode = false,
+  sequenceNumber,
+  isDraggedCard = false
 }: CompactLocationCardProps) {
   const [showDeletePill, setShowDeletePill] = useState(false)
   const domain = getDomain(location.source_url)
@@ -85,10 +91,55 @@ export function CompactLocationCard({
     return options
   }
 
+  // Minimal mode rendering
+  if (isMinimalMode) {
+    return (
+      <div
+        className={`h-12 bg-white border border-gray-300 rounded-lg shadow-sm flex items-center justify-between px-3 py-2 relative transition-all duration-200 ease-in-out ${
+          isDragging ? 'opacity-60 border-primary border-2' : ''
+        }`}
+        onClick={handleCardClick}
+      >
+        {/* Drag Handle - Center Top */}
+        {showDragHandle && dragHandleProps && (
+          <div
+            {...dragHandleProps}
+            className="absolute top-2 left-1/2 -translate-x-1/2 text-gray-400 cursor-grab active:cursor-grabbing text-lg z-10"
+            aria-label={`Drag to reorder ${location.name}, position ${sequenceNumber || 'unknown'}`}
+            role="button"
+            tabIndex={0}
+            onClick={(e) => e.stopPropagation()}
+            onKeyDown={(e) => {
+              if (e.key === ' ' || e.key === 'Enter') {
+                e.preventDefault()
+                // Spacebar/Enter to start drag is handled by @dnd-kit
+              }
+            }}
+          >
+            ≡≡
+          </div>
+        )}
+        
+        {/* Location Name */}
+        <h3 className="flex-1 text-sm font-medium text-gray-900 truncate ml-8">
+          {location.name}
+        </h3>
+        
+        {/* Sequence Badge */}
+        {sequenceNumber !== undefined && (
+          <div className="bg-gray-100 text-gray-700 px-2 py-0.5 rounded text-xs font-medium" aria-label={`Position ${sequenceNumber}`}>
+            {sequenceNumber}
+          </div>
+        )}
+      </div>
+    )
+  }
+
+  // Full card rendering
   return (
     <div
-      className={`bg-white border border-gray-300 rounded-lg shadow-card hover:shadow-card-hover transition-shadow duration-200 relative cursor-pointer ${
-        isDragging ? 'opacity-50 shadow-lg rotate-[-2deg]' : ''
+      className={`bg-white border border-gray-300 rounded-lg shadow-card hover:shadow-card-hover transition-all duration-200 ease-in-out relative cursor-pointer ${
+        isDragging ? 'opacity-60 border-primary border-2' : ''
       }`}
       onClick={handleCardClick}
     >
@@ -96,7 +147,7 @@ export function CompactLocationCard({
       {showDragHandle && dragHandleProps && (
         <div
           {...dragHandleProps}
-          className="absolute left-2 top-1/2 -translate-y-1/2 text-gray-400 cursor-grab active:cursor-grabbing text-lg z-10"
+          className="absolute top-2 left-1/2 -translate-x-1/2 text-gray-400 cursor-grab active:cursor-grabbing text-lg z-10"
           aria-label="Drag to reorder"
           role="button"
           onClick={(e) => e.stopPropagation()}
@@ -106,12 +157,18 @@ export function CompactLocationCard({
       )}
 
       <div className="p-3">
-        {/* Line 1: Location Name + KebabMenu */}
+        {/* Line 1: Location Name + Sequence Badge + KebabMenu */}
         <div className="flex items-start justify-between gap-2 mb-2">
-          <h3 className="text-lg font-semibold text-gray-900 flex-1 leading-tight">
+          <h3 className="text-lg font-semibold text-gray-900 flex-1 leading-tight ml-8">
             {location.name}
           </h3>
-          <div onClick={(e) => e.stopPropagation()}>
+          <div className="flex items-center gap-2" onClick={(e) => e.stopPropagation()}>
+            {/* Sequence Badge - Only show when sequenceNumber provided and showDragHandle is true */}
+            {showDragHandle && sequenceNumber !== undefined && (
+              <div className="bg-gray-100 text-gray-700 px-2 py-0.5 rounded text-xs font-medium" aria-label={`Position ${sequenceNumber}`}>
+                {sequenceNumber}
+              </div>
+            )}
             <KebabMenu
               options={buildKebabMenuOptions()}
               currentDay={location.dayNumber || null}

@@ -1,5 +1,8 @@
-import React, { useState, useEffect, useCallback } from 'react'
-import { DndContext, closestCenter, DragEndEvent } from '@dnd-kit/core'
+import React, { useState, useEffect, useCallback, useRef } from 'react'
+import { DndContext, closestCenter, DragEndEvent, DragStartEvent, DragCancelEvent, DragOverlay } from '@dnd-kit/core'
+import { PointerSensor, useSensor, useSensors } from '@dnd-kit/core'
+import { SortableContext, verticalListSortingStrategy } from '@dnd-kit/sortable'
+import { restrictToVerticalAxis } from '@dnd-kit/modifiers'
 import type { Trip, LocationWithTripData } from '../lib/types'
 import { CompactLocationCard } from '../components/CompactLocationCard'
 import { SortableCompactLocationCard } from '../components/SortableCompactLocationCard'
@@ -36,13 +39,37 @@ export function TripDetail({ trip, onBack, onLocationMoved, onLocationRemoved, o
   const [reorderError, setReorderError] = useState<{ previousOrder: string[]; dayNumber: number } | null>(null)
   const [editModalOpen, setEditModalOpen] = useState(false)
   const [selectedLocationForEdit, setSelectedLocationForEdit] = useState<LocationWithTripData | null>(null)
+  const [isMinimalMode, setIsMinimalMode] = useState(false)
+  const [isSavingOrder, setIsSavingOrder] = useState(false)
+  const [activeId, setActiveId] = useState<string | null>(null)
+  const scrollContainerRef = useRef<HTMLDivElement>(null)
+  const autoScrollIntervalRef = useRef<number | null>(null)
   const { showToast, ToastComponent } = useToast()
+  
+  // Configure sensors with activation constraint
+  const sensors = useSensors(
+    useSensor(PointerSensor, {
+      activationConstraint: {
+        distance: 8, // 8px movement before drag starts
+      },
+      disabled: isSavingOrder, // Disable when saving
+    })
+  )
   
   // Calculate unique countries count from locations
   const uniqueCountriesCount = React.useMemo(() => {
     const uniqueCountryIds = new Set(locations.map(loc => loc.country_id))
     return uniqueCountryIds.size
   }, [locations])
+
+  // Helper function to calculate sequence numbers
+  const getSequenceNumbers = useCallback((locations: LocationWithTripData[]): Record<string, number> => {
+    const sequenceMap: Record<string, number> = {}
+    locations.forEach((loc, index) => {
+      sequenceMap[loc.id] = index + 1 // 1-indexed
+    })
+    return sequenceMap
+  }, [])
   
   useEffect(() => {
     setCurrentTrip(trip)
@@ -375,8 +402,98 @@ export function TripDetail({ trip, onBack, onLocationMoved, onLocationRemoved, o
     }
   }
 
+  // Handle drag start - enter minimal mode
+  const handleDragStart = (event: DragStartEvent) => {
+    setIsMinimalMode(true)
+    setActiveId(event.active.id as string)
+  }
+
+  // Track mouse position during drag for auto-scroll
+  useEffect(() => {
+    if (!isMinimalMode) return
+    
+    const handleMouseMove = (e: MouseEvent) => {
+      if (!scrollContainerRef.current) return
+      
+      const container = scrollContainerRef.current
+      const rect = container.getBoundingClientRect()
+      const mouseY = e.clientY
+      
+      // Clear existing interval
+      if (autoScrollIntervalRef.current) {
+        clearInterval(autoScrollIntervalRef.current)
+        autoScrollIntervalRef.current = null
+      }
+      
+      // Check if cursor is near edges
+      const edgeThreshold = 50
+      const distanceFromTop = mouseY - rect.top
+      const distanceFromBottom = rect.bottom - mouseY
+      
+      if (distanceFromTop < edgeThreshold && container.scrollTop > 0) {
+        // Scroll up
+        autoScrollIntervalRef.current = window.setInterval(() => {
+          if (container.scrollTop > 0) {
+            container.scrollTop -= 10
+          } else {
+            if (autoScrollIntervalRef.current) {
+              clearInterval(autoScrollIntervalRef.current)
+              autoScrollIntervalRef.current = null
+            }
+          }
+        }, 16) // ~60fps
+      } else if (distanceFromBottom < edgeThreshold && container.scrollTop < container.scrollHeight - container.clientHeight) {
+        // Scroll down
+        autoScrollIntervalRef.current = window.setInterval(() => {
+          if (container.scrollTop < container.scrollHeight - container.clientHeight) {
+            container.scrollTop += 10
+          } else {
+            if (autoScrollIntervalRef.current) {
+              clearInterval(autoScrollIntervalRef.current)
+              autoScrollIntervalRef.current = null
+            }
+          }
+        }, 16) // ~60fps
+      }
+    }
+    
+    window.addEventListener('mousemove', handleMouseMove)
+    return () => {
+      window.removeEventListener('mousemove', handleMouseMove)
+      if (autoScrollIntervalRef.current) {
+        clearInterval(autoScrollIntervalRef.current)
+        autoScrollIntervalRef.current = null
+      }
+    }
+  }, [isMinimalMode])
+  
+  // Cleanup auto-scroll on drag end/cancel
+  useEffect(() => {
+    if (!isMinimalMode && autoScrollIntervalRef.current) {
+      clearInterval(autoScrollIntervalRef.current)
+      autoScrollIntervalRef.current = null
+    }
+  }, [isMinimalMode])
+
+  // Handle drag cancel - exit minimal mode and revert
+  const handleDragCancel = (event: DragCancelEvent) => {
+    setIsMinimalMode(false)
+    setActiveId(null)
+    // Clear auto-scroll
+    if (autoScrollIntervalRef.current) {
+      clearInterval(autoScrollIntervalRef.current)
+      autoScrollIntervalRef.current = null
+    }
+    // Revert optimistic sequence updates if needed
+    // Note: Since we haven't updated displayOrder yet during drag, no revert needed here
+  }
+
   // Handle drag end for reordering locations
   const handleDragEnd = async (event: DragEndEvent) => {
+    // Exit minimal mode immediately
+    setIsMinimalMode(false)
+    setActiveId(null)
+    
     const { active, over } = event
     
     if (!over || active.id === over.id) {
@@ -402,9 +519,8 @@ export function TripDetail({ trip, onBack, onLocationMoved, onLocationRemoved, o
     newOrder.splice(newIndex, 0, movedItem)
     const newLocationIds = newOrder.map(loc => loc.id)
     
-    // Store previous order for revert
+    // Store previous order for revert (only used if API call fails)
     const previousOrder = dayLocations.map(loc => loc.id)
-    setReorderError({ previousOrder, dayNumber: selectedDay })
     
     // Optimistic update: reorder immediately
     setLocations(prev => {
@@ -432,9 +548,11 @@ export function TripDetail({ trip, onBack, onLocationMoved, onLocationRemoved, o
     }))
     
     // Call API to save new order
+    setIsSavingOrder(true)
     try {
       await api.reorderTripLocations(currentTrip.id, selectedDay, newLocationIds)
-      setReorderError(null) // Clear error state on success
+      // Clear any existing error state on success
+      setReorderError(null)
       showToast('Order updated', 'success')
       
       // Background refresh to verify
@@ -444,6 +562,9 @@ export function TripDetail({ trip, onBack, onLocationMoved, onLocationRemoved, o
       })
     } catch (error) {
       console.error('Failed to reorder locations:', error)
+      
+      // Set error state ONLY on failure
+      setReorderError({ previousOrder, dayNumber: selectedDay })
       
       // Revert optimistic update - restore previous order
       const previousOrderLocations = previousOrder.map(id => 
@@ -467,6 +588,8 @@ export function TripDetail({ trip, onBack, onLocationMoved, onLocationRemoved, o
       }))
       
       showToast('Failed to save order', 'error')
+    } finally {
+      setIsSavingOrder(false)
     }
   }
 
@@ -622,27 +745,66 @@ export function TripDetail({ trip, onBack, onLocationMoved, onLocationRemoved, o
         ) : (
           <DndContext
             collisionDetection={closestCenter}
+            sensors={sensors}
+            modifiers={[restrictToVerticalAxis]}
+            onDragStart={handleDragStart}
             onDragEnd={handleDragEnd}
+            onDragCancel={handleDragCancel}
           >
-            <div className="p-4 space-y-6">
-              {filteredLocations.map(location => {
-                // Use SortableCompactLocationCard when viewing specific day, CompactLocationCard otherwise
-                const isSpecificDay = typeof selectedDay === 'number'
-                const CardComponent = isSpecificDay ? SortableCompactLocationCard : CompactLocationCard
+            <SortableContext 
+              items={filteredLocations.map(loc => loc.id)}
+              strategy={verticalListSortingStrategy}
+            >
+              <div className="p-4 space-y-6" ref={scrollContainerRef}>
+                {filteredLocations.map((location, index) => {
+                  // Use SortableCompactLocationCard when viewing specific day, CompactLocationCard otherwise
+                  const isSpecificDay = typeof selectedDay === 'number'
+                  const CardComponent = isSpecificDay ? SortableCompactLocationCard : CompactLocationCard
+                  // Show sequence number in both minimal mode and when viewing specific day
+                  const sequenceNumber = (isMinimalMode || isSpecificDay) ? index + 1 : undefined
+                  const isActive = activeId === location.id
+                  
+                  return (
+                    <CardComponent
+                      key={location.id}
+                      location={location}
+                      days={days}
+                      onAction={(action, data) => handleAction(location, action, data)}
+                      onDelete={() => handleRemoveFromTrip(location)}
+                      onLocationClick={onLocationClick}
+                      showDragHandle={isSpecificDay}
+                      isMinimalMode={isMinimalMode}
+                      sequenceNumber={sequenceNumber}
+                      isActive={isActive}
+                    />
+                  )
+                })}
+              </div>
+            </SortableContext>
+            
+            <DragOverlay>
+              {activeId ? (() => {
+                const draggedLocation = filteredLocations.find(loc => loc.id === activeId)
+                if (!draggedLocation) return null
+                
+                const draggedIndex = filteredLocations.findIndex(loc => loc.id === activeId)
+                const sequenceNumber = (isMinimalMode || typeof selectedDay === 'number') ? draggedIndex + 1 : undefined
                 
                 return (
-                  <CardComponent
-                    key={location.id}
-                    location={location}
+                  <CompactLocationCard
+                    location={draggedLocation}
                     days={days}
-                    onAction={(action, data) => handleAction(location, action, data)}
-                    onDelete={() => handleRemoveFromTrip(location)}
-                    onLocationClick={onLocationClick}
-                    showDragHandle={isSpecificDay}
+                    onAction={() => {}}
+                    onDelete={() => {}}
+                    onLocationClick={() => {}}
+                    showDragHandle={typeof selectedDay === 'number'}
+                    isMinimalMode={isMinimalMode}
+                    sequenceNumber={sequenceNumber}
+                    isDragging={true}
                   />
                 )
-              })}
-            </div>
+              })() : null}
+            </DragOverlay>
           </DndContext>
         )}
       </div>
