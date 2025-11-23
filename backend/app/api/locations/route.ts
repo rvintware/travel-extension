@@ -19,6 +19,7 @@ export async function POST(request: Request) {
     console.log('[API] Has screenshot:', !!body.screenshot)
     console.log('[API] Screenshot size:', body.screenshot?.length || 0, 'chars')
     console.log('[API] User ID:', body.userId?.substring(0, 8) + '...')
+    console.log('[API] Has linkUrl:', !!body.linkUrl)
     
     // Validate input
     const validated = createLocationSchema.parse(body)
@@ -56,6 +57,7 @@ export async function POST(request: Request) {
         country_id: finalCountryId,
         name: validated.name,
         original_text: validated.originalText,
+        link_url: validated.linkUrl || null,
         source_url: validated.sourceUrl,
         page_title: validated.pageTitle,
         category: validated.category,
@@ -94,6 +96,7 @@ export async function POST(request: Request) {
             locationId: data.id,
             screenshot: body.screenshot,
             selectedText: validated.originalText,
+            linkUrl: validated.linkUrl || null,
             url: validated.sourceUrl,
             pageTitle: validated.pageTitle || 'Untitled',
             userId: validated.userId,      // For creating multiple locations

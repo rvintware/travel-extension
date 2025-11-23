@@ -34,17 +34,41 @@ export function handleError(error: unknown): NextResponse {
   }
   
   // Handle Zod validation errors
+  // ZodError uses 'issues' internally; 'errors' is an alias that may not work after serialization
   if (error instanceof ZodError) {
+    const zodError = error as any
+    const errors = zodError.issues || zodError.errors || []
+    
     return NextResponse.json(
       { 
         error: 'Validation failed',
-        details: error.errors.map(e => ({
-          field: e.path.join('.'),
-          message: e.message
+        details: errors.map((e: any) => ({
+          field: Array.isArray(e.path) ? e.path.join('.') : String(e.path || ''),
+          message: e.message || 'Invalid value'
         }))
       },
       { status: 400 }
     )
+  }
+  
+  // Fallback: Check for ZodError structure in Error instances (for serialized/wrapped errors)
+  if (error && typeof error === 'object' && error instanceof Error) {
+    const errorObj = error as any
+    // Check for 'issues' property (ZodError's internal property)
+    if (errorObj.issues && Array.isArray(errorObj.issues)) {
+      const errors = errorObj.issues
+      
+      return NextResponse.json(
+        { 
+          error: 'Validation failed',
+          details: errors.map((e: any) => ({
+            field: Array.isArray(e.path) ? e.path.join('.') : String(e.path || ''),
+            message: e.message || 'Invalid value'
+          }))
+        },
+        { status: 400 }
+      )
+    }
   }
   
   // Handle Supabase/PostgreSQL errors

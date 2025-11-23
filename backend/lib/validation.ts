@@ -6,6 +6,7 @@ export const createLocationSchema = z.object({
   countryId: z.string().uuid('Invalid country ID format').nullable().optional(), // Optional - backend AI will detect
   name: z.string().min(1, 'Name is required').max(255, 'Name too long'),
   originalText: z.string().min(1, 'Original text is required'),
+  linkUrl: z.string().url('Invalid link URL').nullable().optional(), // Optional link URL (e.g., Google Maps)
   sourceUrl: z.string().url('Invalid source URL'),
   pageTitle: z.string().optional(),
   category: z.string().optional(),
