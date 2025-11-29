@@ -1,5 +1,5 @@
 import { describe, it, expect } from '@jest/globals'
-import { createTripSchema, updateTripSchema } from '../lib/validation'
+import { createTripSchema, updateTripSchema } from '../../lib/validation'
 
 describe('Trip Date Validation', () => {
   describe('createTripSchema', () => {
