@@ -131,14 +131,29 @@ export async function GET(request: Request) {
         
         if (error) console.error('Error counting locations:', error)
         
-        // Extract countries from junction table
+        // Get unique countries from actual locations (matching TripDetail calculation)
+        const { data: tripLocations, error: locationsError } = await supabase
+          .from('trip_locations')
+          .select('location:locations(country_id)')
+          .eq('trip_id', trip.id)
+        
+        if (locationsError) console.error('Error fetching locations:', locationsError)
+        
+        // Extract unique country IDs from locations
+        const uniqueCountryIds = new Set(
+          (tripLocations || [])
+            .map((tl: any) => tl.location?.country_id)
+            .filter((id: string) => id !== null && id !== undefined)
+        )
+        
+        // Extract countries from junction table (for backward compatibility)
         const countries = trip.trip_countries?.map((tc: any) => tc.country) || []
         
         return {
           ...trip,
           locationCount: count || 0,
-          countries: countries,  // Array of country objects
-          countryCount: countries.length
+          countries: countries,  // Array of country objects (from junction table)
+          countryCount: uniqueCountryIds.size  // Count from actual locations (matches TripDetail)
         }
       })
     )

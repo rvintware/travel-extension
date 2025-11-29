@@ -229,7 +229,7 @@ export function LocationEditModal({ isOpen, location, tripLocationId, onSave, on
             className="flex-1"
             disabled={saving}
           >
-            {saving ? 'Saving...' : 'Save Changes'}
+            {saving ? 'Saving...' : 'Save'}
           </Button>
         </div>
       </div>

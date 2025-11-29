@@ -384,16 +384,24 @@ function IndexPopup() {
     })
   }
   
-  function handleDeleteAllComplete() {
+  async function handleDeleteAllComplete() {
     // OPTIMISTIC UPDATE - Clear all data immediately (0ms blocking)
     setTrips([])
     setLocations([])
     setCountries([]) // Clear countries too
     
+    // Clear defaultTripId from settings (all trips deleted)
+    await setDefaultTrip(null)
+    
     // INVALIDATE CACHE - Force fresh fetch (already done in Settings, but ensure consistency)
     Cache.invalidateTrips()
     Cache.invalidateLocations()
     // Note: Cache.clearAll() already called in Settings, but this ensures consistency
+    
+    // Notify background script
+    chrome.runtime.sendMessage({ type: 'SETTINGS_UPDATED' }).catch(() => {
+      // Background worker not ready, that's fine
+    })
     
     // Background refresh to verify (non-blocking)
     loadDataWithCache().catch(error => {
@@ -492,6 +500,10 @@ function IndexPopup() {
           onBack={handleBackToList}
           onAddToTrip={handleAddToTrip}
           onDelete={handleLocationDeleted}
+          onLocationClick={(location) => handleLocationClick(
+            location as LocationWithTripData,
+            { view: 'countryDetail' }
+          )}
           onLocationAddedToTrip={(tripId) => {
             // OPTIMISTIC UPDATE - Increment location count for the affected trip immediately
             setTrips(prev => prev.map(trip => {

@@ -2,8 +2,10 @@ import OpenAI from 'openai'
 import { inngest } from '../inngest'
 import { supabase } from '../supabase'
 import { extractFromScreenshot, countLocations, extractMultipleLocations, extractLocationVariations, extractGlobalContext, GlobalContext, extractTieredTips } from '../ai/extract'
-import { searchGooglePlaces, fetchGoogleReviews } from '../places/search'
+import { searchGooglePlaces, fetchGoogleReviews, searchGooglePlacesByPlaceId, searchGooglePlacesByCoordinates } from '../places/search'
 import { findExistingLocation, mergeIntoExisting } from '../locations/merge'
+import { extractLinksFromText, parseGoogleMapsUrl, LinkExtractionResult } from '../links/parser'
+import { expandShortenedUrl, isShortenedUrl } from '../links/url-expander'
 
 /**
  * Inngest function to process location(s) with AI and Google Places
@@ -25,6 +27,7 @@ export const processLocation = inngest.createFunction(
       locationId,      // Placeholder location ID
       screenshot, 
       selectedText, 
+      linkUrl,         // NEW: Link URL from context menu
       url, 
       pageTitle,
       userId,          // For creating multiple locations
@@ -34,6 +37,8 @@ export const processLocation = inngest.createFunction(
     } = event.data
     
     console.log(`[Job] Processing location ${locationId}`)
+    console.log(`[Job] Has linkUrl:`, !!linkUrl)  // NEW
+    console.log(`[Job] Has screenshot:`, !!screenshot)
     console.log(`[Job] Has tripId:`, !!tripId)
     console.log(`[Job] Using user API key:`, !!userApiKey)  // Don't log the actual key!
     
@@ -45,14 +50,225 @@ export const processLocation = inngest.createFunction(
     
     const openaiClient = new OpenAI({ apiKey })
     
-    // ==================== STEP 0: EXTRACT GLOBAL CONTEXT ====================
+    // ==================== STEP 0: LINK PRE-PARSING (NEW) ====================
+    const linkAnalysis = await step.run('parse-links', async () => {
+      console.log('[Job] Step 0: Link Pre-Parsing')
+      
+      // Combine selectedText and linkUrl for comprehensive extraction
+      // If linkUrl provided in event, include it in text to parse
+      let textToParse = selectedText || ''
+      if (linkUrl) {
+        // Combine: selectedText may already contain linkUrl, but ensure it's included
+        textToParse = textToParse ? `${textToParse} ${linkUrl}` : linkUrl
+      }
+      
+      if (!textToParse.trim()) {
+        console.log('[Job] No text to parse, returning empty result')
+        return {
+          googleMapsLinks: [],
+          otherLinks: [],
+          cleanedText: ''
+        }
+      }
+      
+      // Extract URLs from text (categorizes but doesn't parse yet)
+      const extracted = extractLinksFromText(textToParse)
+      
+      // Expand shortened URLs before parsing (optimize: expand → parse once)
+      const expandedLinks: ParsedMapLink[] = []
+      
+      for (const link of extracted.googleMapsLinks) {
+        let urlToParse = link.originalUrl
+        let expandedUrl: string | undefined = undefined
+        
+        // Check if shortened and expand if needed
+        if (isShortenedUrl(link.originalUrl)) {
+          console.log(`[Job]   Expanding shortened URL: ${link.originalUrl.substring(0, 50)}...`)
+          urlToParse = await expandShortenedUrl(link.originalUrl)
+          
+          if (urlToParse !== link.originalUrl) {
+            expandedUrl = urlToParse
+            console.log(`[Job]   Expanded to: ${expandedUrl.substring(0, 100)}...`)
+          } else {
+            console.log(`[Job]   Expansion returned same URL (no redirect)`)
+          }
+        }
+        
+        // Parse the (expanded) URL once with all identifiers
+        const parsed = parseGoogleMapsUrl(urlToParse)
+        
+        // Set expandedUrl if expansion occurred
+        if (expandedUrl) {
+          parsed.expandedUrl = expandedUrl
+        }
+        
+        expandedLinks.push(parsed)
+      }
+      
+      console.log(`[Job] Found ${expandedLinks.length} Google Maps links`)
+      console.log(`[Job] Found ${extracted.otherLinks.length} other links`)
+      console.log(`[Job] Cleaned text length: ${extracted.cleanedText.length} chars`)
+      
+      // Log each Google Maps link found
+      expandedLinks.forEach((link, i) => {
+        const expansionInfo = link.expandedUrl ? ` (expanded)` : ''
+        console.log(`[Job]   Link ${i+1}: ${link.originalUrl}${expansionInfo} (confidence: ${link.confidence})`)
+      })
+      
+      return {
+        googleMapsLinks: expandedLinks,
+        otherLinks: extracted.otherLinks,
+        cleanedText: extracted.cleanedText
+      }
+    })
+    
+    // ==================== STEP 0.5: PROCESS GOOGLE MAPS LINKS (NEW) ====================
+    const linkResults = await step.run('process-map-links', async () => {
+      console.log('[Job] Step 0.5: Process Google Maps Links')
+      const results: Array<{
+        source: 'link'
+        place: Awaited<ReturnType<typeof searchGooglePlacesByPlaceId>>
+        confidence: number
+        method: 'place_id' | 'coordinates' | 'query'
+        originalUrl: string
+        expandedUrl?: string  // Only present if URL was expanded
+      }> = []
+      
+      if (linkAnalysis.googleMapsLinks.length === 0) {
+        console.log('[Job] No Google Maps links to process')
+        return results
+      }
+      
+      for (let i = 0; i < linkAnalysis.googleMapsLinks.length; i++) {
+        const link = linkAnalysis.googleMapsLinks[i]
+        console.log(`[Job] Processing link ${i+1}/${linkAnalysis.googleMapsLinks.length}`)
+        console.log(`[Job]   URL: ${link.originalUrl}`)
+        if (link.expandedUrl) {
+          console.log(`[Job]   Expanded URL: ${link.expandedUrl.substring(0, 100)}...`)
+        }
+        console.log(`[Job]   Confidence: ${link.confidence}`)
+        
+        // Links are already expanded and parsed in Step 0
+        // Use the parsed data directly
+        const parsed = link
+        const expandedUrl = link.expandedUrl  // Already set in Step 0 if expansion occurred
+        
+        // Try to get place data based on what we extracted (priority order)
+        let place: Awaited<ReturnType<typeof searchGooglePlacesByPlaceId>> = null
+        let confidence = 0.5
+        let method: 'place_id' | 'coordinates' | 'query' = 'query'
+        
+        // HIGH CONFIDENCE: Direct Place ID lookup
+        if (parsed.placeId) {
+          console.log(`[Job]   Attempting Place ID lookup: ${parsed.placeId}`)
+          place = await searchGooglePlacesByPlaceId(parsed.placeId)
+          if (place) {
+            confidence = 1.0
+            method = 'place_id'
+            console.log(`[Job]   ✅ Found via Place ID: ${place.name}`)
+          } else {
+            console.log(`[Job]   ❌ Place ID lookup failed`)
+          }
+        }
+        
+        // MEDIUM CONFIDENCE: CID lookup (using ftid or data CID)
+        // Note: Google Places API doesn't directly support CID lookup
+        // We'll use CID as a query string for text search (less reliable than Place ID)
+        if (!place && parsed.cid) {
+          console.log(`[Job]   Found CID: ${parsed.cid}`)
+          console.log(`[Job]   ⚠️ CID lookup not directly supported by Google Places API, falling back to query/coordinates`)
+          // CID format: 0x35419186f3dcf331:0xcfdb147061f6629
+          // We can't directly lookup CID, but we can use it in a query
+          // For now, fall through to coordinate/query search
+          // Future: Could implement CID → Place ID conversion if API supports it
+        }
+        
+        // MEDIUM CONFIDENCE: Coordinate search
+        if (!place && parsed.coordinates) {
+          console.log(`[Job]   Attempting coordinate search: ${parsed.coordinates.lat}, ${parsed.coordinates.lng}`)
+          place = await searchGooglePlacesByCoordinates(
+            parsed.coordinates.lat,
+            parsed.coordinates.lng
+          )
+          if (place) {
+            confidence = 0.9
+            method = 'coordinates'
+            console.log(`[Job]   ✅ Found via coordinates: ${place.name}`)
+          } else {
+            console.log(`[Job]   ❌ Coordinate search failed`)
+          }
+        }
+        
+        // LOW CONFIDENCE: Text query from URL
+        if (!place && parsed.query) {
+          console.log(`[Job]   Attempting text search: ${parsed.query}`)
+          place = await searchGooglePlaces(parsed.query)
+          if (place) {
+            confidence = 0.7
+            method = 'query'
+            console.log(`[Job]   ✅ Found via query: ${place.name}`)
+          } else {
+            console.log(`[Job]   ❌ Text search failed`)
+          }
+        }
+        
+        if (place) {
+          // Build result object conditionally
+          const result: {
+            source: 'link'
+            place: typeof place
+            confidence: number
+            method: typeof method
+            originalUrl: string
+            expandedUrl?: string
+          } = {
+            source: 'link',
+            place: place,
+            confidence: confidence,
+            method: method,
+            originalUrl: link.originalUrl
+          }
+          
+          // Only include expandedUrl if it exists and differs from originalUrl
+          if (expandedUrl && expandedUrl !== link.originalUrl) {
+            result.expandedUrl = expandedUrl
+            console.log(`[Job]   ✅ Link processed successfully (expanded: ${expandedUrl.substring(0, 80)}...)`)
+          } else {
+            console.log(`[Job]   ✅ Link processed successfully (no expansion needed)`)
+          }
+          
+          results.push(result)
+        } else {
+          // Log expansion info even for failed lookups (for debugging)
+          if (expandedUrl && expandedUrl !== link.originalUrl) {
+            console.log(`[Job]   ❌ Failed to find place (expanded: ${expandedUrl.substring(0, 80)}...)`)
+          } else {
+            console.log(`[Job]   ❌ Failed to find place for link (all methods failed)`)
+          }
+        }
+      }
+      
+      // Count how many URLs were expanded
+      const expandedCount = results.filter(r => r.expandedUrl).length
+      if (expandedCount > 0) {
+        console.log(`[Job] Link processing complete: ${results.length}/${linkAnalysis.googleMapsLinks.length} places found (${expandedCount} URLs expanded)`)
+      } else {
+        console.log(`[Job] Link processing complete: ${results.length}/${linkAnalysis.googleMapsLinks.length} places found`)
+      }
+      return results
+    })
+    
+    // ==================== STEP 1: EXTRACT GLOBAL CONTEXT (UPDATED - WITH CLEANED TEXT) ====================
     const globalContext = await step.run('extract-global-context', async () => {
       if (!screenshot) {
         console.log('[Job] No screenshot, skipping context extraction')
         return null
       }
       
-      return await extractGlobalContext(screenshot, selectedText, url, pageTitle, openaiClient)
+      console.log('[Job] Step 1: Extract Global Context')
+      console.log('[Job] Using cleaned text (URLs removed)')
+      
+      return await extractGlobalContext(screenshot, linkAnalysis.cleanedText, url, pageTitle, openaiClient)
     })
     
     if (globalContext) {
@@ -72,38 +288,53 @@ export const processLocation = inngest.createFunction(
         .eq('id', locationId)
     })
     
-    // STEP 1: Count how many locations
+    // ==================== STEP 2: COUNT LOCATIONS (UPDATED - WITH CLEANED TEXT) ====================
     const count = await step.run('count-locations', async () => {
-      return await countLocations(screenshot, selectedText, openaiClient)
+      console.log('[Job] Step 2: Count Locations')
+      console.log('[Job] Using cleaned text (URLs removed)')
+      return await countLocations(screenshot, linkAnalysis.cleanedText, openaiClient)
     })
     
     console.log(`[Job] Count: ${count} locations`)
     
-    if (count === 0) {
-      // No locations found
+    // Handle no locations found (check both text and links)
+    if (count === 0 && linkResults.length === 0) {
       await supabase
         .from('locations')
         .update({ 
           processing_status: 'error',
-          error_message: 'No locations detected in highlighted text'
+          error_message: 'No locations detected in text or links'
         })
         .eq('id', locationId)
       return { success: false, reason: 'No locations found' }
     }
     
+    // ==================== STEP 3: TEXT EXTRACTION ====================
+    let textResults: Array<{
+      source: 'text'
+      place: Awaited<ReturnType<typeof searchGooglePlaces>> | null
+      confidence: number
+      attempt: number
+      query: string
+      fallbackName: string
+    }> = []
+    
+    let detectedCountryId: string | null = countryId || null
+    
     if (count === 1) {
       // ==================== SINGLE LOCATION FLOW (MULTI-ATTEMPT) ====================
+      console.log('[Job] Step 3a: Single Location Flow')
       console.log('[Job] Single location - using multi-attempt extraction')
       
       // Step 1: Get 3 variations with global context
       const variations = await step.run('extract-variations', async () => {
         console.log('[Job] Calling extractLocationVariations...')
-        console.log('[Job]   selectedText:', selectedText)
+        console.log('[Job]   cleanedText:', linkAnalysis.cleanedText)
         console.log('[Job]   hasGlobalContext:', !!globalContext)
         
         const result = await extractLocationVariations(
           screenshot, 
-          selectedText, 
+          linkAnalysis.cleanedText,  // CHANGED: Use cleanedText
           url, 
           pageTitle,
           globalContext,  // 🔧 Pass global context
@@ -123,7 +354,7 @@ export const processLocation = inngest.createFunction(
       })
       
       // 🔧 UPDATED: Step 1.5 - Detect country using global context FIRST
-      const detectedCountryId = await step.run('detect-country-single', async () => {
+      detectedCountryId = await step.run('detect-country-single', async () => {
         console.log('[Job] 🎯 Detecting country...')
         
         // Fetch all countries from database
@@ -203,282 +434,35 @@ export const processLocation = inngest.createFunction(
           usedQuery: null,
           attemptNumber: variations.length,
           confidence: variations[0]?.confidence || 0.5,
-          fallbackName: variations[0]?.searchQuery || selectedText  // Use first variation as name
+          fallbackName: variations[0]?.searchQuery || linkAnalysis.cleanedText || selectedText  // Use first variation as name
         }
       })
       
-      // 🆕 STEP 3.5: Fetch Google Reviews (PHASE 2: TIERED TIPS)
-      const reviews = await step.run('fetch-google-reviews', async () => {
-        if (!placeResult?.place || !placeResult.place.place_id) {
-          console.log('[Job] No place_id, skipping reviews')
-          return []
-        }
-        
-        console.log('[Job] Fetching Google reviews...')
-        const fetchedReviews = await fetchGoogleReviews(placeResult.place.place_id)
-        console.log(`[Job] Fetched ${fetchedReviews.length} reviews`)
-        
-        return fetchedReviews
-      })
-      
-      // 🆕 STEP 3.6: Extract Tiered Tips (PHASE 2: TIERED TIPS)
-      const tieredTips = await step.run('extract-tiered-tips', async () => {
-        if (!screenshot) {
-          console.log('[Job] No screenshot, skipping tip extraction')
-          return []
-        }
-        
-        console.log('[Job] Extracting tiered tips...')
-        const tips = await extractTieredTips(screenshot, selectedText, reviews, openaiClient)
-        console.log(`[Job] Extracted ${tips.length} tiered tips`)
-        
-        return tips
-      })
-      
-      // 🆕 STEP 3.7: Check for Duplicate Location (PHASE 1: DEDUPLICATION)
-      const duplicateCheck = await step.run('check-duplicate', async () => {
-        if (!placeResult?.place || !placeResult.place.place_id) {
-          console.log('[Job] No place_id, skipping duplicate check')
-          return { isDuplicate: false, existingLocation: null }
-        }
-        
-        console.log('[Job] Checking for duplicate with place_id:', placeResult.place.place_id)
-        const existing = await findExistingLocation(userId, placeResult.place.place_id)
-        
-        if (existing) {
-          console.log('[Job] 🔄 Duplicate found! Existing location:', existing.id)
-        } else {
-          console.log('[Job] ✅ No duplicate, creating new location')
-        }
-        
-        return {
-          isDuplicate: !!existing,
-          existingLocation: existing
-        }
-      })
-      
-      // If duplicate found, merge instead of updating placeholder
-      if (duplicateCheck.isDuplicate && duplicateCheck.existingLocation) {
-        console.log('[Job] 🔄 Duplicate detected, merging...')
-        
-        // Merge tips and sources
-        const merged = await step.run('merge-duplicate', async () => {
-          const result = await mergeIntoExisting(
-            duplicateCheck.existingLocation.id,
-            {
-              tips: tieredTips,  // 🔧 Use new tiered tips
-              sourceUrl: url,
-              sources: [url]
-            }
-          )
-          
-          console.log('[Job] ✅ Merged successfully, added', result.tipsAdded, 'tips')
-          
-          // Link to trip if specified
-          if (tripId) {
-            console.log('[Job] Linking merged location to trip:', tripId)
-            const { error: linkError } = await supabase
-              .from('trip_locations')
-              .insert({
-                trip_id: tripId,
-                location_id: duplicateCheck.existingLocation.id,
-                display_order: 0
-              })
-              .select()
-            
-            // Ignore if already linked (duplicate link error)
-            if (linkError && linkError.code !== '23505') {
-              console.error('[Job] ❌ Failed to link to trip:', linkError)
-              throw linkError
-            } else if (linkError?.code === '23505') {
-              console.log('[Job] Location already linked to this trip')
-            } else {
-              console.log('[Job] ✅ Linked to trip successfully')
-            }
-          }
-          
-          return result
+      // Store result in textResults array (defer database operations until after reconciliation)
+      if (placeResult) {
+        textResults.push({
+          source: 'text',
+          place: placeResult.place,
+          confidence: placeResult.confidence,
+          attempt: placeResult.attemptNumber,
+          query: placeResult.usedQuery || '',
+          fallbackName: placeResult.fallbackName
         })
-        
-        // Delete the placeholder location
-        await step.run('delete-placeholder', async () => {
-          console.log('[Job] Deleting placeholder location:', locationId)
-          await supabase.from('locations').delete().eq('id', locationId)
-        })
-        
-        return {
-          success: true,
-          merged: true,
-          locationId: duplicateCheck.existingLocation.id,
-          tipsAdded: merged.tipsAdded,
-          message: 'Merged into existing location'
-        }
-      }
-      
-      // Otherwise, continue with normal flow (update placeholder)
-      // Step 3: Update placeholder with result AND detected country
-      const updated = await step.run('update-placeholder', async () => {
-        // 🔧 Always have fallbackName from placeResult (no more undefined error)
-        const { place, usedQuery, attemptNumber, confidence, fallbackName } = placeResult
-        
-        if (!place) {
-          // 🔧 NEW: Try coordinate fallback if available
-          if (globalContext?.approximateCoordinates) {
-            console.log('[Job] ⚠️ Google failed, using coordinate fallback')
-            
-            // 🔧 Log if country changed
-            if (countryId && detectedCountryId !== countryId) {
-              const { data: oldCountry } = await supabase
-                .from('countries')
-                .select('name, code')
-                .eq('id', countryId)
-                .single()
-              
-              const { data: newCountry } = await supabase
-                .from('countries')
-                .select('name, code')
-                .eq('id', detectedCountryId)
-                .single()
-              
-              console.log(`[Job] 🔄 Country updated: ${oldCountry?.name} (${oldCountry?.code}) → ${newCountry?.name} (${newCountry?.code})`)
-            }
-            
-            const { data, error } = await supabase
-              .from('locations')
-              .update({
-                name: fallbackName,
-                country_id: detectedCountryId,
-                lat: globalContext.approximateCoordinates.lat,
-                lng: globalContext.approximateCoordinates.lng,
-                address: `${globalContext.city}, ${globalContext.region || ''}, ${globalContext.country}`.trim(),
-                summary: `Location in ${globalContext.city}, ${globalContext.country} (coordinates estimated by AI)`,
-                tips: tieredTips,  // 🔧 PHASE 2: Include tiered tips
-                location_verified: false,
-                confidence_score: Math.max(confidence, globalContext.confidence * 0.7),
-                processing_status: 'complete',
-                processed_at: new Date().toISOString(),
-                original_context: {
-                  globalContext: globalContext,
-                  coordinateSource: 'ai-estimated',
-                  extractionMethod: 'context-first'
-                }
-              })
-              .eq('id', locationId)
-              .select()
-            
-            if (error) throw error
-            return data?.[0]
-          }
-          
-          // No coordinates, just save with name
-          console.log('[Job] ❌ No Google result and no coordinates')
-          
-          // 🔧 Log if country changed
-          if (countryId && detectedCountryId !== countryId) {
-            const { data: oldCountry } = await supabase
-              .from('countries')
-              .select('name, code')
-              .eq('id', countryId)
-              .single()
-            
-            const { data: newCountry } = await supabase
-              .from('countries')
-              .select('name, code')
-              .eq('id', detectedCountryId)
-              .single()
-            
-            console.log(`[Job] 🔄 Country updated: ${oldCountry?.name} (${oldCountry?.code}) → ${newCountry?.name} (${newCountry?.code})`)
-          }
-          
-          const { data, error } = await supabase
-            .from('locations')
-            .update({
-              name: fallbackName,
-              country_id: detectedCountryId,
-              summary: `Extracted from: "${selectedText}"`,
-              tips: tieredTips,  // 🔧 PHASE 2: Include tiered tips
-              location_verified: false,
-              confidence_score: confidence,
-              processing_status: 'complete',
-              error_message: 'Not found on Google Places',
-              processed_at: new Date().toISOString()
-            })
-            .eq('id', locationId)
-            .select()
-          
-          if (error) throw error
-          return data?.[0]
-        }
-        
-        // Success! Update with Google data
-        // 🔧 Log if country changed from initial value
-        if (countryId && detectedCountryId !== countryId) {
-          const { data: oldCountry } = await supabase
-            .from('countries')
-            .select('name, code')
-            .eq('id', countryId)
-            .single()
-          
-          const { data: newCountry } = await supabase
-            .from('countries')
-            .select('name, code')
-            .eq('id', detectedCountryId)
-            .single()
-          
-          console.log(`[Job] 🔄 Country updated: ${oldCountry?.name} (${oldCountry?.code}) → ${newCountry?.name} (${newCountry?.code})`)
-        }
-        
-        const updateData: any = {
-          name: place.name,
-          country_id: detectedCountryId,  // 🔧 Update country!
-          address: place.address,
-          lat: place.lat,
-          lng: place.lng,
-          photos: place.photos || [],
-          place_id: place.place_id,
-          location_verified: true,
-          confidence_score: confidence,
-          summary: `Found via: "${usedQuery}" (attempt ${attemptNumber})`,
-          tips: tieredTips,  // 🔧 PHASE 2: Use tiered tips instead of old summary
-          processing_status: 'complete',
-          processed_at: new Date().toISOString()
-        }
-        
-        if (place.rating) {
-          updateData.user_rating = Math.round(place.rating)
-        }
-        if (place.priceLevel) {
-          updateData.price_level = place.priceLevel
-        }
-        
-        const { data, error } = await supabase
-          .from('locations')
-          .update(updateData)
-          .eq('id', locationId)
-          .select()
-        
-        if (error) throw error
-        return data?.[0]
-      })
-      
-      return { 
-        success: true, 
-        count: 1,
-        locationId,
-        name: updated?.name,
-        verified: placeResult?.place !== null,
-        detectedCountry: detectedCountryId !== countryId  // 🔧 Flag if country was changed
       }
       
     } else {
       // ==================== MULTIPLE LOCATIONS FLOW ====================
-      console.log('[Job] Multiple locations - creating separate entries')
+      console.log('[Job] Step 3b: Multiple Locations Flow')
+      console.log('[Job] Multiple locations - extracting all')
       
       const locations = await step.run('extract-multiple', async () => {
+        console.log('[Job] Extracting multiple locations...')
+        console.log('[Job] Using cleaned text (URLs removed)')
+        
         // 🔧 Pass globalContext to extraction
         const extracted = await extractMultipleLocations(
           screenshot, 
-          selectedText, 
+          linkAnalysis.cleanedText,  // CHANGED: Use cleanedText
           url,
           globalContext,  // Pass global context
           openaiClient    // Pass OpenAI client
@@ -499,7 +483,7 @@ export const processLocation = inngest.createFunction(
       })
       
       // 🔧 UPDATED: Smart country detection using global context FIRST
-      const { detectedCountryId, targetLocations } = await step.run('detect-country-and-filter', async () => {
+      const countryAndLocations = await step.run('detect-country-and-filter', async () => {
         console.log('[Job] 🎯 Starting smart filtering...')
         
         // Fetch all countries from database
@@ -574,15 +558,19 @@ export const processLocation = inngest.createFunction(
         }
       })
       
-      const created = await step.run('create-all-locations', async () => {
-        const results = []
-        
+      detectedCountryId = countryAndLocations.detectedCountryId
+      const targetLocations = countryAndLocations.targetLocations
+      
+      // Store results in textResults array instead of creating locations directly
+      await step.run('search-all-locations', async () => {
         // 🔧 Use targetLocations (already filtered) instead of locations
         for (const loc of targetLocations) {
           console.log(`[Job] Processing: ${loc.location_name}`)
           
           // 🔧 UPDATED: Multi-attempt search with global context enrichment
           let place = null
+          let attemptNumber = 0
+          let usedQuery = ''
           const searchQueries = []
           
           // Build search queries from most to least specific
@@ -608,6 +596,8 @@ export const processLocation = inngest.createFunction(
             
             if (place) {
               console.log(`[Job] ✅ Found with query: "${query}"`)
+              attemptNumber = i + 1
+              usedQuery = query
               break
             }
             console.log(`[Job] ❌ Not found, trying next...`)
@@ -615,158 +605,311 @@ export const processLocation = inngest.createFunction(
           
           console.log(`[Job] Final result:`, place ? `Found ${place.name}` : 'Not found')
           
-          // 🔧 NEW: Coordinate fallback if Google fails
-          if (!place && globalContext?.approximateCoordinates) {
-            console.log(`[Job] ⚠️ Google failed, using estimated coordinates`)
+          // Store result in textResults array (skip if no place found - will handle coordinate fallback in Step 5)
+          if (place) {
+            textResults.push({
+              source: 'text',
+              place: place,
+              confidence: loc.confidence || 0.7,
+              attempt: attemptNumber,
+              query: usedQuery,
+              fallbackName: loc.location_name
+            })
+          }
+        }
+      })
+    }
+    
+    // ==================== STEP 4: RECONCILIATION (NEW) ====================
+    const finalLocations = await step.run('reconcile-links-and-text', async () => {
+      console.log('[Job] Step 4: Reconciliation')
+      console.log(`[Job] Link results: ${linkResults.length}`)
+      console.log(`[Job] Text results: ${textResults.length}`)
+      
+      // Combine all results into single array
+      const allLocations: Array<{
+        source: 'link' | 'text'
+        place: Awaited<ReturnType<typeof searchGooglePlaces>> | null
+        confidence: number
+        method?: string
+        attempt?: number
+        query?: string
+        fallbackName: string
+        originalUrl?: string
+      }> = []
+      
+      // Add link results
+      linkResults.forEach(r => {
+        allLocations.push({
+          source: 'link',
+          place: r.place,
+          confidence: r.confidence,
+          method: r.method,
+          fallbackName: r.place.name,
+          originalUrl: r.originalUrl
+        })
+      })
+      
+      // Add text results
+      textResults.forEach(r => {
+        allLocations.push({
+          source: 'text',
+          place: r.place,
+          confidence: r.confidence,
+          attempt: r.attempt,
+          query: r.query,
+          fallbackName: r.fallbackName
+        })
+      })
+      
+      console.log(`[Job] Total locations before deduplication: ${allLocations.length}`)
+      
+      // Group by place_id
+      const grouped = new Map<string, Array<typeof allLocations[0]>>()
+      const noPlaceId: Array<typeof allLocations[0]> = []
+      
+      for (const location of allLocations) {
+        if (location.place?.place_id) {
+          const placeId = location.place.place_id
+          if (!grouped.has(placeId)) {
+            grouped.set(placeId, [])
+          }
+          grouped.get(placeId)!.push(location)
+        } else {
+          // No place_id - keep as separate (will use fallbackName for uniqueness)
+          noPlaceId.push(location)
+        }
+      }
+      
+      console.log(`[Job] Grouped into ${grouped.size} unique places (by place_id)`)
+      console.log(`[Job] ${noPlaceId.length} locations without place_id`)
+      
+      // Pick best from each group
+      const deduplicated: Array<typeof allLocations[0]> = []
+      
+      // Process grouped locations (with place_id)
+      for (const [placeId, locations] of grouped) {
+        console.log(`[Job] Place ID ${placeId}: ${locations.length} duplicate(s)`)
+        
+        // Sort by priority: link source first, then by confidence
+        const sorted = locations.sort((a, b) => {
+          // Priority 1: Link source beats text source
+          if (a.source === 'link' && b.source !== 'link') return -1
+          if (a.source !== 'link' && b.source === 'link') return 1
+          
+          // Priority 2: Higher confidence wins
+          return (b.confidence || 0) - (a.confidence || 0)
+        })
+        
+        const best = sorted[0]
+        console.log(`[Job]   Selected: source=${best.source}, confidence=${best.confidence}, method=${best.method || 'N/A'}`)
+        
+        deduplicated.push(best)
+      }
+      
+      // Add locations without place_id (no deduplication possible)
+      deduplicated.push(...noPlaceId)
+      
+      console.log(`[Job] Final locations after deduplication: ${deduplicated.length}`)
+      return deduplicated
+    })
+    
+    // ==================== STEP 5: ENRICHMENT & PERSISTENCE (UPDATED) ====================
+    // Process finalLocations (may be 1 or multiple)
+    const enrichedLocations = await step.run('enrich-and-persist', async () => {
+      console.log(`[Job] Step 5: Enriching ${finalLocations.length} location(s)`)
+      
+      const results: Array<{
+        id: string
+        name: string
+        place_id: string | null
+        merged: boolean
+      }> = []
+      
+      for (let i = 0; i < finalLocations.length; i++) {
+        const location = finalLocations[i]
+        console.log(`[Job] Processing location ${i+1}/${finalLocations.length}: ${location.fallbackName}`)
+        
+        // Skip if no place found (for now - could create with coordinates later)
+        if (!location.place) {
+          console.log(`[Job]   Skipping: No place data`)
+          continue
+        }
+        
+        const place = location.place
+        
+        // Fetch reviews if place_id exists (no nested step - execute directly)
+        let reviews: any[] = []
+        if (place.place_id) {
+          console.log(`[Job]   Fetching reviews for ${place.name}...`)
+          reviews = await fetchGoogleReviews(place.place_id)
+        }
+        
+        // Extract tiered tips (no nested step - execute directly)
+        let tieredTips: any[] = []
+        if (screenshot) {
+          console.log(`[Job]   Extracting tips...`)
+          tieredTips = await extractTieredTips(
+            screenshot, 
+            linkAnalysis.cleanedText,  // Use cleanedText
+            reviews, 
+            openaiClient
+          )
+        }
+        
+        // Check for duplicate by place_id (no nested step - execute directly)
+        let duplicateCheck: { isDuplicate: boolean; existingLocation: any } = {
+          isDuplicate: false,
+          existingLocation: null
+        }
+        if (place.place_id) {
+          const existing = await findExistingLocation(userId, place.place_id)
+          duplicateCheck = {
+            isDuplicate: !!existing,
+            existingLocation: existing
+          }
+        }
+        
+        // Handle duplicate or create new
+        if (duplicateCheck.isDuplicate && duplicateCheck.existingLocation) {
+          console.log(`[Job]   🔄 Duplicate found, merging...`)
+          
+          await mergeIntoExisting(
+            duplicateCheck.existingLocation.id,
+            {
+              tips: tieredTips,
+              sourceUrl: url,
+              sources: [url]
+            }
+          )
+          
+          // Link to trip if specified
+          if (tripId) {
+            await supabase.from('trip_locations').insert({
+              trip_id: tripId,
+              location_id: duplicateCheck.existingLocation.id,
+              display_order: i
+            }).catch(() => {}) // Ignore duplicate link errors
+          }
+          
+          results.push({
+            id: duplicateCheck.existingLocation.id,
+            name: duplicateCheck.existingLocation.name,
+            place_id: place.place_id,
+            merged: true
+          })
+          
+        } else {
+          // Create new location or update placeholder
+          const isFirstLocation = i === 0
+          
+          if (isFirstLocation) {
+            // Update placeholder
+            console.log(`[Job]   Updating placeholder location...`)
+            const { data: updated } = await supabase
+              .from('locations')
+              .update({
+                name: place.name,
+                country_id: detectedCountryId,  // From earlier step
+                address: place.address,
+                lat: place.lat,
+                lng: place.lng,
+                photos: place.photos || [],
+                place_id: place.place_id,
+                location_verified: true,
+                confidence_score: location.confidence,
+                summary: `Found via: ${location.source} (${location.method || 'text'})`,
+                tips: tieredTips,
+                processing_status: 'complete',
+                processed_at: new Date().toISOString(),
+                user_rating: place.rating ? Math.round(place.rating) : null,
+                price_level: place.priceLevel
+              })
+              .eq('id', locationId)
+              .select()
+              .single()
             
-            // Create location with estimated coordinates
+            if (updated) {
+              results.push({
+                id: updated.id,
+                name: updated.name,
+                place_id: place.place_id,
+                merged: false
+              })
+            }
+          } else {
+            // Create new location
+            console.log(`[Job]   Creating new location...`)
             const { data: newLoc } = await supabase
               .from('locations')
               .insert({
                 user_id: userId,
                 country_id: detectedCountryId,
-                name: loc.location_name,
-                address: `${globalContext.city}, ${globalContext.region || ''}, ${globalContext.country}`.trim(),
-                lat: globalContext.approximateCoordinates.lat,
-                lng: globalContext.approximateCoordinates.lng,
-                category: loc.category,
-                subcategory: loc.subcategory,
-                location_verified: false,
-                confidence_score: Math.max(loc.confidence || 0.6, globalContext.confidence * 0.7),
-                summary: `Location in ${globalContext.city}, ${globalContext.country} (coordinates estimated by AI)`,
+                name: place.name,
+                address: place.address,
+                lat: place.lat,
+                lng: place.lng,
+                photos: place.photos || [],
+                place_id: place.place_id,
+                location_verified: true,
+                confidence_score: location.confidence,
+                summary: `Found via: ${location.source} (${location.method || 'text'})`,
+                tips: tieredTips,
                 original_text: selectedText,
                 source_url: url,
                 page_title: pageTitle,
                 source_type: 'single_save',
                 processing_status: 'complete',
                 processed_at: new Date().toISOString(),
-                original_context: {
-                  globalContext: globalContext,
-                  coordinateSource: 'ai-estimated',
-                  extractionMethod: 'context-first'
-                }
+                user_rating: place.rating ? Math.round(place.rating) : null,
+                price_level: place.priceLevel
               })
               .select()
               .single()
             
             if (newLoc) {
-              // Link to trip if provided
-              if (tripId) {
-                await supabase.from('trip_locations').insert({
-                  trip_id: tripId,
-                  location_id: newLoc.id,
-                  display_order: results.length
-                })
-              }
-              
-              results.push(newLoc)
-            }
-            continue
-          }
-          
-          // Skip if no Google result and no coordinates
-          if (!place) {
-            console.log(`[Job] ❌ Skipping "${loc.location_name}" - no Google match, no coordinates`)
-            continue
-          }
-          
-          // Layer 3: Database check - prevent duplicates
-          if (place?.place_id) {
-            const { data: existingByPlaceId } = await supabase
-              .from('locations')
-              .select('id, name')
-              .eq('user_id', userId)
-              .eq('place_id', place.place_id)
-              .maybeSingle()
-            
-            if (existingByPlaceId) {
-              console.log(`[Job] Location exists (place_id: ${place.place_id}), skipping`)
-              continue
-            }
-          }
-          
-          // Also check by normalized name (fallback if no place_id)
-          const { data: existingByName } = await supabase
-            .from('locations')
-            .select('id, name')
-            .eq('user_id', userId)
-            .ilike('name', loc.location_name)
-            .maybeSingle()
-          
-          if (existingByName) {
-            console.log(`[Job] Location exists by name: ${existingByName.name}, skipping`)
-            continue
-          }
-          
-          // Create new location (verified with Google data)
-          const { data: newLoc } = await supabase
-            .from('locations')
-            .insert({
-              user_id: userId,
-              country_id: detectedCountryId,  // 🔧 Use detected country ID
-              name: place.name,
-              address: place.address || loc.address,
-              lat: place.lat,
-              lng: place.lng,
-              category: loc.category,
-              subcategory: loc.subcategory,
-              summary: loc.summary || `Location from travel plan`,
-              tips: loc.tips || [],
-              photos: place.photos || [],
-              place_id: place.place_id,
-              location_verified: true,  // ✅ Always true now (we skip if no place)
-              confidence_score: loc.confidence || 0.7,
-              user_rating: place.rating ? Math.round(place.rating) : null,
-              price_level: place.priceLevel,
-              original_text: selectedText,
-              source_url: url,
-              page_title: pageTitle,
-              source_type: 'single_save',
-              processing_status: 'complete',
-              is_from_itinerary: false,
-              processed_at: new Date().toISOString(),
-              // 🔧 NEW: Store global context metadata
-              original_context: globalContext ? {
-                globalContext: globalContext,
-                coordinateSource: 'google',
-                extractionMethod: 'context-first'
-              } : null
-            })
-            .select()
-            .single()
-          
-          if (newLoc) {
-            // Link to trip if provided
-            if (tripId) {
-              await supabase.from('trip_locations').insert({
-                trip_id: tripId,
-                location_id: newLoc.id,
-                display_order: results.length  // Order by extraction
+              results.push({
+                id: newLoc.id,
+                name: newLoc.name,
+                place_id: place.place_id,
+                merged: false
               })
             }
-            
-            results.push(newLoc)
+          }
+          
+          // Link to trip if specified
+          if (tripId && results[results.length - 1]) {
+            await supabase.from('trip_locations').insert({
+              trip_id: tripId,
+              location_id: results[results.length - 1].id,
+              display_order: i
+            }).catch(() => {}) // Ignore duplicate link errors
           }
         }
-        
-        return results
-      })
-      
-      // Delete the placeholder location
-      await step.run('cleanup-placeholder', async () => {
-        await supabase.from('locations').delete().eq('id', locationId)
-        return { deleted: locationId, created: created.length }
-      })
-      
-      return { 
-        success: true,
-        count: created.length, 
-        locations: created.map(l => ({
-          id: l.id,
-          name: l.name,
-          verified: l.location_verified
-        }))
       }
+      
+      return results
+    })
+    
+    // ==================== STEP 6: CLEANUP (if multiple locations) ====================
+    // Move cleanup outside enrich-and-persist to avoid nested steps
+    if (finalLocations.length > 1) {
+      await step.run('cleanup-placeholder', async () => {
+        console.log(`[Job] Step 6: Cleaning up placeholder (${finalLocations.length} locations created)`)
+        await supabase.from('locations').delete().eq('id', locationId)
+        console.log(`[Job] ✅ Placeholder deleted`)
+      })
+    }
+    
+    return {
+      success: true,
+      count: enrichedLocations.length,
+      locations: enrichedLocations.map(l => ({
+        id: l.id,
+        name: l.name,
+        verified: !!l.place_id,
+        merged: l.merged
+      }))
     }
   }
 )

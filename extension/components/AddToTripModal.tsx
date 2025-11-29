@@ -55,7 +55,7 @@ export function AddToTripModal({ location, trips, onClose, onSuccess, onAlreadyI
         // Defer callback to ensure modal closes before toast appears
         requestAnimationFrame(() => {
           requestAnimationFrame(() => {
-            onAlreadyInTrip(trip.name)
+        onAlreadyInTrip(trip.name)
           })
         })
       } else {
