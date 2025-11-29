@@ -41,6 +41,7 @@ export async function saveLocation(data: {
   countryId?: string | null  // Optional - backend AI will detect country
   name: string
   originalText: string
+  linkUrl?: string | null  // Phase 3: Optional link URL (e.g., Google Maps link)
   sourceUrl: string
   pageTitle?: string
   category?: string
@@ -51,6 +52,7 @@ export async function saveLocation(data: {
   console.log('[API Client] URL:', `${API_URL}/api/locations`)
   console.log('[API Client] Data keys:', Object.keys(data))
   console.log('[API Client] Has screenshot:', !!data.screenshot)
+  console.log('[API Client] Has linkUrl:', !!data.linkUrl)
   
   // BYOK: Get user's API key from settings
   const settings = await chrome.storage.local.get(['useOwnApiKey', 'openaiApiKey'])

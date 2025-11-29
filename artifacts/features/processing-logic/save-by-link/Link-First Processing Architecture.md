@@ -316,29 +316,34 @@ sequenceDiagram
     LinkParser->>LinkParser: Clean text
     Note over LinkParser: Remove all URLs<br/>Keep: Anchor text, surrounding context
     
-    LinkParser-->>Inngest: LinkExtractionResult
-    Note over LinkParser,Inngest: {<br/>  googleMapsLinks: ParsedMapLink[],<br/>  otherLinks: string[],<br/>  cleanedText: string<br/>}
-    
-    Note over Inngest,URLExpander: ─────── STEP 0.5: PROCESS LINKS ───────
-    
     loop For each Google Maps link
         alt Link is shortened (goo.gl, maps.app.goo.gl)
             Inngest->>URLExpander: expandShortenedUrl(link)
             
-            URLExpander->>URLExpander: HTTP HEAD request
-            Note over URLExpander: axios.head(url, {<br/>  maxRedirects: 5<br/>})
+            URLExpander->>URLExpander: HTTP GET request
+            Note over URLExpander: axios.get(url, {<br/>  maxRedirects: 5<br/>})
             
             URLExpander-->>Inngest: expandedUrl
             Note over URLExpander,Inngest: Full URL after redirects
         end
         
         Inngest->>LinkParser: parseGoogleMapsUrl(expandedUrl)
+        Note over Inngest,LinkParser: Parse expanded URL once<br/>(optimize: expand → parse)
         
         LinkParser->>LinkParser: Extract identifiers
-        Note over LinkParser: 1. Place ID: place_id=ChIJ...<br/>2. CID: data=...!1s0x...<br/>3. Coords: @lat,lng,zoom<br/>4. Query: /place/Name/
+        Note over LinkParser: 1. Place ID: place_id=ChIJ...<br/>2. CID: ftid=0x... or data=...!1s0x...<br/>3. Coords: @lat,lng,zoom<br/>4. Query: q=... or /place/Name/
         
         LinkParser-->>Inngest: ParsedMapLink
-        Note over LinkParser,Inngest: {<br/>  placeId?: string,<br/>  cid?: string,<br/>  coordinates?: {lat, lng},<br/>  query?: string,<br/>  confidence: 'high'|'medium'|'low'<br/>}
+        Note over LinkParser,Inngest: {<br/>  originalUrl: string,<br/>  expandedUrl?: string,<br/>  placeId?: string,<br/>  cid?: string,<br/>  coordinates?: {lat, lng},<br/>  query?: string,<br/>  confidence: 'high'|'medium'|'low'<br/>}
+    end
+    
+    LinkParser-->>Inngest: LinkExtractionResult
+    Note over LinkParser,Inngest: {<br/>  googleMapsLinks: ParsedMapLink[],<br/>  otherLinks: string[],<br/>  cleanedText: string<br/>}
+    
+    Note over Inngest,Google: ─────── STEP 0.5: PROCESS LINKS ───────
+    
+    loop For each parsed Google Maps link
+        Note over Inngest: Links already expanded & parsed<br/>Use parsed data directly
         
         alt Has Place ID (Highest confidence)
             Inngest->>Google: placeDetails({ place_id })
@@ -733,32 +738,36 @@ export interface LinkExtractionResult {
  */
 export interface ParsedMapLink {
   originalUrl: string
-  expandedUrl: string  // After following redirects
-  placeId?: string     // ChIJ... format
-  cid?: string         // 0x... hex format
+  expandedUrl?: string  // Optional - only present after URL expansion
+  placeId?: string       // ChIJ... format
+  cid?: string           // 0x... hex format (from ftid or data parameter)
   coordinates?: {
     lat: number
     lng: number
   }
-  query?: string       // Location name from URL path
+  query?: string         // Location name from URL path or q parameter
   confidence: 'high' | 'medium' | 'low'
 }
 
 /**
  * Extract all links from text and categorize them
+ * 
+ * Note: This function parses URLs immediately for initial categorization.
+ * In Step 0, shortened URLs are expanded and re-parsed with the expanded URL
+ * to extract all identifiers correctly.
  */
 export function extractLinksFromText(text: string): LinkExtractionResult {
   // Regex to match URLs
   const urlRegex = /https?:\/\/[^\s<>"]+/gi
   const matches = text.match(urlRegex) || []
   
-  const googleMapsLinks: string[] = []
+  const googleMapsLinks: ParsedMapLink[] = []
   const otherLinks: string[] = []
   
-  // Categorize URLs
+  // Categorize URLs and parse Google Maps URLs
   for (const url of matches) {
     if (isGoogleMapsUrl(url)) {
-      googleMapsLinks.push(url)
+      googleMapsLinks.push(parseGoogleMapsUrl(url))
     } else {
       otherLinks.push(url)
     }
@@ -768,7 +777,7 @@ export function extractLinksFromText(text: string): LinkExtractionResult {
   const cleanedText = text.replace(urlRegex, '').replace(/\s+/g, ' ').trim()
   
   return {
-    googleMapsLinks: googleMapsLinks.map(parseGoogleMapsUrl),
+    googleMapsLinks,
     otherLinks,
     cleanedText
   }
@@ -795,11 +804,14 @@ function isGoogleMapsUrl(url: string): boolean {
 
 /**
  * Parse Google Maps URL to extract identifiers
+ * 
+ * Note: This function should be called with the expanded URL (if shortened).
+ * URL expansion happens before parsing in Step 0 of the Inngest job.
  */
 function parseGoogleMapsUrl(url: string): ParsedMapLink {
   const result: ParsedMapLink = {
     originalUrl: url,
-    expandedUrl: url,  // Will be updated if shortened
+    // expandedUrl is set separately during expansion if needed
     confidence: 'low'
   }
   
@@ -958,61 +970,112 @@ export const processLocation = inngest.createFunction(
     const linkAnalysis = await step.run('parse-links', async () => {
       console.log('[Job] Step 0: Link Pre-Parsing')
       
-      // If linkUrl provided in event, prioritize it
-      let textToParse = selectedText
+      // Combine selectedText and linkUrl for comprehensive extraction
+      let textToParse = selectedText || ''
       if (linkUrl) {
-        textToParse = `${selectedText} ${linkUrl}`  // Combine for comprehensive extraction
+        textToParse = textToParse ? `${textToParse} ${linkUrl}` : linkUrl
       }
       
-      const result = extractLinksFromText(textToParse)
+      // Extract URLs from text (categorizes and does initial parse)
+      const extracted = extractLinksFromText(textToParse)
       
-      console.log(`[Job] Found ${result.googleMapsLinks.length} Google Maps links`)
-      console.log(`[Job] Found ${result.otherLinks.length} other links`)
-      console.log(`[Job] Cleaned text length: ${result.cleanedText.length}`)
+      // Expand shortened URLs before parsing (optimize: expand → parse once)
+      const expandedLinks: ParsedMapLink[] = []
       
-      return result
+      for (const link of extracted.googleMapsLinks) {
+        let urlToParse = link.originalUrl
+        let expandedUrl: string | undefined = undefined
+        
+        // Check if shortened and expand if needed
+        if (isShortenedUrl(link.originalUrl)) {
+          console.log(`[Job]   Expanding shortened URL: ${link.originalUrl.substring(0, 50)}...`)
+          urlToParse = await expandShortenedUrl(link.originalUrl)
+          
+          if (urlToParse !== link.originalUrl) {
+            expandedUrl = urlToParse
+            console.log(`[Job]   Expanded to: ${expandedUrl.substring(0, 100)}...`)
+          }
+        }
+        
+        // Parse the (expanded) URL once with all identifiers
+        const parsed = parseGoogleMapsUrl(urlToParse)
+        
+        // Set expandedUrl if expansion occurred
+        if (expandedUrl) {
+          parsed.expandedUrl = expandedUrl
+        }
+        
+        expandedLinks.push(parsed)
+      }
+      
+      console.log(`[Job] Found ${expandedLinks.length} Google Maps links`)
+      console.log(`[Job] Found ${extracted.otherLinks.length} other links`)
+      console.log(`[Job] Cleaned text length: ${extracted.cleanedText.length} chars`)
+      
+      return {
+        googleMapsLinks: expandedLinks,
+        otherLinks: extracted.otherLinks,
+        cleanedText: extracted.cleanedText
+      }
     })
     
     // ==================== STEP 0.5: PROCESS GOOGLE MAPS LINKS (NEW) ====================
     const linkResults = await step.run('process-map-links', async () => {
       console.log('[Job] Step 0.5: Process Google Maps Links')
-      const results: any[] = []
+      const results: Array<{
+        source: 'link'
+        place: PlaceResult
+        confidence: number
+        method: 'place_id' | 'coordinates' | 'query'
+        originalUrl: string
+        expandedUrl?: string
+      }> = []
+      
+      if (linkAnalysis.googleMapsLinks.length === 0) {
+        console.log('[Job] No Google Maps links to process')
+        return results
+      }
       
       for (let i = 0; i < linkAnalysis.googleMapsLinks.length; i++) {
         const link = linkAnalysis.googleMapsLinks[i]
         console.log(`[Job] Processing link ${i+1}/${linkAnalysis.googleMapsLinks.length}`)
-        console.log(`[Job] URL: ${link.originalUrl}`)
-        
-        // Expand shortened URLs
-        let urlToProcess = link.originalUrl
-        if (isShortenedUrl(link.originalUrl)) {
-          urlToProcess = await expandShortenedUrl(link.originalUrl)
-          link.expandedUrl = urlToProcess
-          console.log(`[Job] Expanded to: ${urlToProcess}`)
+        console.log(`[Job]   URL: ${link.originalUrl}`)
+        if (link.expandedUrl) {
+          console.log(`[Job]   Expanded URL: ${link.expandedUrl.substring(0, 100)}...`)
         }
+        console.log(`[Job]   Confidence: ${link.confidence}`)
         
-        // Re-parse expanded URL
-        const parsed = parseGoogleMapsUrl(urlToProcess)
+        // Links are already expanded and parsed in Step 0
+        // Use the parsed data directly
+        const parsed = link
+        const expandedUrl = link.expandedUrl
         
         // Try to get place data based on what we extracted
         let place = null
         let confidence = 0.5
         let method = 'unknown'
         
+        // Try to get place data based on what we extracted (priority order)
+        let place: PlaceResult | null = null
+        let confidence = 0.5
+        let method: 'place_id' | 'coordinates' | 'query' = 'query'
+        
         // HIGH CONFIDENCE: Direct Place ID lookup
         if (parsed.placeId) {
-          console.log(`[Job] Attempting Place ID lookup: ${parsed.placeId}`)
+          console.log(`[Job]   Attempting Place ID lookup: ${parsed.placeId}`)
           place = await searchGooglePlacesByPlaceId(parsed.placeId)
           if (place) {
             confidence = 1.0
             method = 'place_id'
-            console.log(`[Job] ✅ Found via Place ID`)
+            console.log(`[Job]   ✅ Found via Place ID: ${place.name}`)
+          } else {
+            console.log(`[Job]   ❌ Place ID lookup failed`)
           }
         }
         
         // MEDIUM CONFIDENCE: Coordinate search
         if (!place && parsed.coordinates) {
-          console.log(`[Job] Attempting coordinate search: ${parsed.coordinates.lat}, ${parsed.coordinates.lng}`)
+          console.log(`[Job]   Attempting coordinate search: ${parsed.coordinates.lat}, ${parsed.coordinates.lng}`)
           place = await searchGooglePlacesByCoordinates(
             parsed.coordinates.lat,
             parsed.coordinates.lng
@@ -1020,35 +1083,68 @@ export const processLocation = inngest.createFunction(
           if (place) {
             confidence = 0.9
             method = 'coordinates'
-            console.log(`[Job] ✅ Found via coordinates`)
+            console.log(`[Job]   ✅ Found via coordinates: ${place.name}`)
+          } else {
+            console.log(`[Job]   ❌ Coordinate search failed`)
           }
         }
         
         // LOW CONFIDENCE: Text query from URL
         if (!place && parsed.query) {
-          console.log(`[Job] Attempting text search: ${parsed.query}`)
+          console.log(`[Job]   Attempting text search: ${parsed.query}`)
           place = await searchGooglePlaces(parsed.query)
           if (place) {
             confidence = 0.7
             method = 'query'
-            console.log(`[Job] ✅ Found via query`)
+            console.log(`[Job]   ✅ Found via query: ${place.name}`)
+          } else {
+            console.log(`[Job]   ❌ Text search failed`)
           }
         }
         
         if (place) {
-          results.push({
+          // Build result object conditionally
+          const result: {
+            source: 'link'
+            place: typeof place
+            confidence: number
+            method: typeof method
+            originalUrl: string
+            expandedUrl?: string
+          } = {
             source: 'link',
             place: place,
             confidence: confidence,
             method: method,
             originalUrl: link.originalUrl
-          })
+          }
+          
+          // Only include expandedUrl if it exists and differs from originalUrl
+          if (expandedUrl && expandedUrl !== link.originalUrl) {
+            result.expandedUrl = expandedUrl
+            console.log(`[Job]   ✅ Link processed successfully (expanded: ${expandedUrl.substring(0, 80)}...)`)
+          } else {
+            console.log(`[Job]   ✅ Link processed successfully (no expansion needed)`)
+          }
+          
+          results.push(result)
         } else {
-          console.log(`[Job] ❌ Failed to find place for link`)
+          // Log expansion info even for failed lookups (for debugging)
+          if (expandedUrl && expandedUrl !== link.originalUrl) {
+            console.log(`[Job]   ❌ Failed to find place (expanded: ${expandedUrl.substring(0, 80)}...)`)
+          } else {
+            console.log(`[Job]   ❌ Failed to find place for link (all methods failed)`)
+          }
         }
       }
       
-      console.log(`[Job] Link processing complete: ${results.length} places found`)
+      // Count how many URLs were expanded
+      const expandedCount = results.filter(r => r.expandedUrl).length
+      if (expandedCount > 0) {
+        console.log(`[Job] Link processing complete: ${results.length}/${linkAnalysis.googleMapsLinks.length} places found (${expandedCount} URLs expanded)`)
+      } else {
+        console.log(`[Job] Link processing complete: ${results.length}/${linkAnalysis.googleMapsLinks.length} places found`)
+      }
       return results
     })
     

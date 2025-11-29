@@ -82,7 +82,7 @@ async function updateContextMenus() {
         chrome.contextMenus.create({
         id: MENU_ID_TRIP,
         title: `⭐ Save to ${activeTrip.name}`,
-          contexts: ['selection'],
+          contexts: ['selection', 'link'],
         })
       console.log('[BG] ✅ Context menu created for trip:', activeTrip.name)
     } else {
@@ -90,7 +90,7 @@ async function updateContextMenus() {
       chrome.contextMenus.create({
         id: MENU_ID_LIBRARY,
         title: '📍 Save Location',
-        contexts: ['selection'],
+        contexts: ['selection', 'link'],
       })
       console.log('[BG] ✅ Context menu created for library save')
     }
@@ -104,7 +104,7 @@ async function updateContextMenus() {
       chrome.contextMenus.create({
         id: MENU_ID_LIBRARY,
         title: '📍 Save Location',
-        contexts: ['selection'],
+        contexts: ['selection', 'link'],
       })
     } catch (fallbackError) {
       console.error('[BG] Failed to create fallback menu:', fallbackError)
@@ -117,12 +117,23 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
   console.log('[BG] ========== SAVE STARTED ==========')
   console.log('[BG] Menu ID:', info.menuItemId)
   console.log('[BG] Selected text length:', info.selectionText?.length)
+  console.log('[BG] Link URL:', info.linkUrl)
   console.log('[BG] Tab URL:', tab?.url)
   
-  if (!info.selectionText || !tab?.id) {
-    console.error('[BG] Missing selection or tab')
+  // Allow either text OR link
+  if (!info.selectionText && !info.linkUrl) {
+    console.error('[BG] Missing both selection and link')
     return
   }
+  
+  if (!tab?.id) {
+    console.error('[BG] Missing tab')
+    return
+  }
+  
+  // Capture link URL if present
+  const linkUrl = info.linkUrl || null
+  console.log('[BG] Link URL captured:', linkUrl)
   
   try {
     // Get settings
@@ -150,11 +161,16 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
     console.log('[BG] Calling backend API...')
     console.log('[BG] Has screenshot:', !!screenshot)
     
+    // Determine name and originalText based on what's available
+    const nameText = info.selectionText || linkUrl || 'Untitled'
+    const originalText = info.selectionText || linkUrl || ''
+    
     const location = await api.saveLocation({
       userId,
       countryId: null, // Let backend AI detect country
-      name: api.extractNameFromText(info.selectionText),
-      originalText: info.selectionText,
+      name: api.extractNameFromText(nameText),
+      originalText: originalText,
+      linkUrl: linkUrl,
       sourceUrl: tab.url || '',
       pageTitle: tab.title || 'Untitled',
       screenshot: screenshot, // Screenshot for AI vision
