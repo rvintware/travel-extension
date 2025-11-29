@@ -92,6 +92,7 @@ Request body:
   "countryId": "country-uuid",
   "name": "Location name",
   "originalText": "Highlighted text from source",
+  "linkUrl": "https://maps.google.com/...",  // NEW: Optional Google Maps URL
   "sourceUrl": "https://reddit.com/...",
   "pageTitle": "Page title",
   "category": "restaurant"
@@ -317,6 +318,23 @@ This API is designed to support AI processing in Phase 0.3:
 - Can add Inngest job trigger in POST /api/locations
 - AI enrichment happens asynchronously
 - Extension polls for completion
+
+## Link-First Processing Architecture (Phase 4+)
+
+The API now supports saving locations via Google Maps links:
+
+- **Link URL Support**: `linkUrl` field accepts Google Maps URLs
+- **Automatic Parsing**: Inngest job extracts Place IDs from URLs
+- **Dual-Path Processing**: Links processed first, then text
+- **Smart Deduplication**: Prevents duplicate locations when link and text reference same place
+
+**Dependencies:**
+- `axios` (^1.6.0) - For URL expansion
+
+**Migration Required:**
+- Run `backend/migrations/add_link_url_column.sql` on database
+
+See `LINK_FIRST_DEPLOYMENT.md` for deployment instructions.
 
 ## Troubleshooting
 

@@ -13,6 +13,8 @@ When you right-click and save, you should see logs in this exact order across al
 [BG] ========== SAVE STARTED ==========
 [BG] Menu ID: save-to-trip (or save-to-library)
 [BG] Selected text length: 45
+[BG] Link URL: https://maps.app.goo.gl/... (if present)
+[BG] Link URL captured: https://maps.app.goo.gl/... (if present)
 [BG] Tab URL: https://reddit.com/...
 [BG] Getting user settings...
 [BG] User ID: 55f2b33e...
@@ -73,6 +75,31 @@ When you right-click and save, you should see logs in this exact order across al
 - **Events tab:** New `location/created` event appears
 - **Runs tab:** Job starts running
 - **Click the run:** See 3 steps execute
+
+### 6. Link Processing Logs (NEW - Phase 4+)
+
+When saving via link, you'll see additional logs:
+
+**Step 0: Link Pre-Parsing**
+```
+[Job] Step 0: Link Pre-Parsing
+[Job]   Expanding shortened URL: https://maps.app.goo.gl/...
+[Job]   Expanded to: https://www.google.com/maps/place/...
+[Job] Found 1 Google Maps links
+[Job] Found 0 other links
+[Job] Cleaned text length: 25 chars
+```
+
+**Step 0.5: Process Google Maps Links**
+```
+[Job] Step 0.5: Process Google Maps Links
+[Job] Processing link 1/1
+[Job]   URL: https://maps.app.goo.gl/...
+[Job]   Expanded URL: https://www.google.com/maps/place/...
+[Job]   Confidence: high
+[Job]   Attempting Place ID lookup: ChIJ...
+[Job]   ✅ Found via Place ID: Location Name
+```
 
 ---
 
@@ -141,6 +168,90 @@ When you right-click and save, you should see logs in this exact order across al
 - Check error message in backend console
 - Might be network issue
 - Inngest client config issue
+
+---
+
+### Issue: Link Not Processed
+
+**Problem:** Link URL present but no link results in Step 0.5
+
+**Check:**
+1. Look for `[Job] Step 0: Link Pre-Parsing` logs
+2. Check if `[Job] Found X Google Maps links` shows > 0
+3. Verify URL is recognized as Google Maps URL
+
+**Common Causes:**
+- URL not recognized as Google Maps (check `isGoogleMapsUrl()` logic)
+- URL expansion failed (network issue, timeout)
+- URL parsing failed (malformed URL)
+
+**Fix:**
+- Check backend console for URL expansion errors
+- Verify URL format matches Google Maps patterns
+- Check network connectivity for shortened URLs
+
+---
+
+### Issue: Place ID Not Extracted
+
+**Problem:** Link processed but Place ID lookup failed
+
+**Check:**
+1. Look for `[Job]   Attempting Place ID lookup: ChIJ...`
+2. Check if `[Job]   ❌ Place ID lookup failed` appears
+3. Verify fallback methods (coordinates, query) attempted
+
+**Common Causes:**
+- Place ID invalid or expired
+- Google Places API key missing or invalid
+- API quota exceeded
+
+**Fix:**
+- Verify `GOOGLE_PLACES_API_KEY` environment variable set
+- Check Google Cloud Console for API quota
+- Verify Place ID format (should start with `ChIJ`)
+
+---
+
+### Issue: URL Expansion Failed
+
+**Problem:** Shortened URL not expanding
+
+**Check:**
+1. Look for `[Job]   Expanding shortened URL: ...`
+2. Check if `[Job]   Expanded to: ...` appears
+3. Look for axios/network errors in backend console
+
+**Common Causes:**
+- Network timeout (default 5 seconds)
+- URL redirect loop (maxRedirects exceeded)
+- Invalid shortened URL
+
+**Fix:**
+- Check network connectivity
+- Verify URL is accessible (try in browser)
+- Check axios timeout settings in `url-expander.ts`
+
+---
+
+### Issue: Deduplication Not Working
+
+**Problem:** Same location saved twice (once from link, once from text)
+
+**Check:**
+1. Look for `[Job] Step 4: Reconciliation` logs
+2. Check `[Job] Grouped into X unique places`
+3. Verify `[Job]   Selected: source=link` appears
+
+**Common Causes:**
+- Different Place IDs for same location (rare)
+- Reconciliation step failed
+- Place ID not extracted from one source
+
+**Fix:**
+- Check reconciliation logs for grouping
+- Verify both link and text results have place_id
+- Check if confidence/source prioritization working
 
 ---
 
