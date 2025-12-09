@@ -6,7 +6,8 @@ A Chrome extension and backend system for capturing, organizing, and planning tr
 
 ### 🎯 Capture & Organization
 - **One-Click Capture**: Right-click any highlighted text to save locations. Two-option right-click (Save Location / Save to Active Trip)
-**Two-Tab Interface**: Separate views for "My Locations" library and "My Trips" planning
+- **Link-First Capture**: Right-click directly on Google Maps links to save locations instantly. No text selection needed!
+- **Two-Tab Interface**: Separate views for "My Locations" library and "My Trips" planning
 - **Country-Grouped Library**: Locations automatically organized by country
 - **Pokemon-Style Cards**: Rich location cards with photos, addresses, and context specific human tips
 
@@ -21,6 +22,13 @@ A Chrome extension and backend system for capturing, organizing, and planning tr
 - **Comprehensive Details**: Includes all locations, tips, sources, scheduling, and trip notes
 - **Professional Format**: Clean hierarchy with emojis, perfect for sharing with travel companions
 - **Customizable**: Format specification in `artifacts/features/trip-export/export-format-specification.md`
+
+### 🔗 Link-First Processing
+- **Google Maps Link Support**: Right-click any Google Maps link to save location
+- **Automatic Place ID Extraction**: Direct Place ID lookup for 100% accuracy
+- **Smart Deduplication**: If same location appears as both link and text, only one is saved
+- **Shortened URL Support**: Automatically expands goo.gl and maps.app.goo.gl links
+- **Fallback Processing**: If link parsing fails, falls back to text-based extraction
 
 ### ⚙️ Other Features
 - **Settings Panel**: Configure default country and default trip
@@ -197,9 +205,10 @@ Users:
 **The Flow:**
 
 ```
-1. User right-clicks text
+1. User right-clicks text OR link
 2. Extension captures:
-   ├─ Selected text
+   ├─ Selected text (if present)
+   ├─ Link URL (if right-clicked on link)
    ├─ Screenshot (JPEG, 70% quality)
    ├─ URL and page title
    └─ User settings
@@ -209,15 +218,19 @@ Users:
    └─ Returns locationId immediately
 4. Extension starts polling GET /api/locations/:id
 5. Inngest job processes asynchronously:
-   ├─ Step 0: Extract Global Context (city, country, coordinates)
-   ├─ Step 1: Count locations (1 or many?)
-   ├─ Step 2a: If 1 → Multi-attempt extraction
+   ├─ Step 0: Link Pre-Parsing (extract Place IDs from Google Maps URLs)
+   ├─ Step 0.5: Process Google Maps Links (direct Place ID lookup)
+   ├─ Step 1: Extract Global Context (city, country, coordinates)
+   ├─ Step 2: Count locations (1 or many?)
+   ├─ Step 3a: If 1 → Multi-attempt extraction
    │   ├─ Generate 3 search query variations
    │   ├─ Try Google Places with each
    │   └─ Update placeholder with best match
-   └─ Step 2b: If many → Extract array
-       ├─ Create separate locations
-       └─ Link all to trip if specified
+   ├─ Step 3b: If many → Extract array
+   │   ├─ Create separate locations
+   │   └─ Link all to trip if specified
+   ├─ Step 4: Reconciliation (deduplicate link + text results)
+   └─ Step 5: Enrichment & Persistence
 6. Extension detects status change
 7. UI updates with rich data
 ```
@@ -864,6 +877,20 @@ if (!place) {
 
 This comprehensive overview should help anyone understand exactly how the Travel Companion system works from the ground up! 🚀
 
+## Troubleshooting
+
+### Link Saving Issues
+
+- **Link not detected**: Ensure you're right-clicking directly on the link, not surrounding text
+- **Place ID not extracted**: Some Google Maps URLs don't contain Place IDs - system will use coordinates or query fallback
+- **Shortened URL not expanding**: Check network connectivity, URL expansion requires HTTP request
+
+### General Issues
+
+- **Location not saving**: Check browser console for errors, verify API endpoint is accessible
+- **Processing stuck**: Check Inngest dashboard for job status, verify API keys are configured
+- **Duplicate locations**: System automatically deduplicates when same location saved via link and text
+
 ## License
 
 Private project - All rights reserved
@@ -871,4 +898,4 @@ Private project - All rights reserved
 ---
 
 **Built by Rehan Vishwanath**  
-**Last Updated**: October 11, 2025
+**Last Updated**: November 24, 2025
